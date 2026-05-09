@@ -1,0 +1,27 @@
+{
+  "name": "opencode-pets",
+  "version": "0.0.0",
+  "description": "Desktop virtual pet for OpenCode coding sessions",
+  "type": "module",
+  "main": "./src/index.ts",
+  "files": [
+    "src"
+  ],
+  "scripts": {
+    "prepublishOnly": "echo 'placeholder'"
+  },
+  "author": "coffeeboi0811",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/coffeeboi0811/opencode-pets"
+  },
+  "keywords": [
+    "opencode",
+    "pets",
+    "virtual-pet"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}
