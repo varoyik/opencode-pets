@@ -12,5 +12,8 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/varoyik/opencode-pets"
+  },
+  "dependencies": {
+    "zod": "^4.4.3"
   }
 }
