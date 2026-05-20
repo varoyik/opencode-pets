@@ -9,11 +9,12 @@
     "assets"
   ],
   "scripts": {
-    "dev": "tsc && electron .",
-    "dev:watch": "tsc --watch"
+    "dev": "tsc && bun scripts/copy-assets.ts && electron .",
+    "dev:watch": "tsc --watch",
+    "copy-assets": "bun scripts/copy-assets.ts"
   },
   "dependencies": {
-    "electron": "^42.0.0"
+    "electron": "^42.2.0"
   },
   "author": "varoyik",
   "license": "MIT",
