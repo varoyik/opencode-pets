@@ -7,7 +7,7 @@ Desktop virtual pet that lives as a floating overlay, reacting in real-time to O
 - **Language:** TypeScript (100%, strict mode, ESNext target, native ESM)
 - **Runtime:** Bun (runtime, package manager, IPC, process spawning)
 - **Monorepo:** Bun workspaces — `packages/plugin`, `packages/overlay`, `packages/core`, `packages/cli`
-- **Overlay:** Electron ^33+ (transparent frameless BrowserWindow), vanilla HTML/CSS/JS renderer
+- **Overlay:** Electron ^42+ (transparent frameless BrowserWindow), vanilla HTML/CSS/JS renderer
 - **IPC:** Unix domain sockets (macOS/Linux) / named pipes (Windows), JSON protocol
 - **Validation:** Zod (config, IPC messages, pet manifests)
 - **Packaging:** electron-builder (cross-platform)

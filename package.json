@@ -10,11 +10,11 @@
     "build": "tsc --build tsconfig.json",
     "clean": "tsc --build --clean tsconfig.json"
   },
-  "author": "coffeeboi0811",
+  "author": "varoyik",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/coffeeboi0811/opencode-pets"
+    "url": "https://github.com/varoyik/opencode-pets"
   },
   "devDependencies": {
     "@types/bun": "latest"
