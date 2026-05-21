@@ -1,4 +1,4 @@
-const { contextBridge } = require("electron");
+const { contextBridge, ipcRenderer } = require("electron");
 
 const prefix = "--spritesheet-path=";
 const spritesheetArg = process.argv.find((arg: string) =>
@@ -10,4 +10,15 @@ const spritesheetPath = spritesheetArg
 
 contextBridge.exposeInMainWorld("electronAPI", {
   getSpritesheetPath: (): string => `file://${spritesheetPath}`,
+  onMoodChanged: (callback: (mood: string) => void): void => {
+    ipcRenderer.on("mood-changed", (_event: any, mood: string) =>
+      callback(mood),
+    );
+  },
+  onBubble: (callback: (text: string, duration: number) => void): void => {
+    ipcRenderer.on(
+      "show-bubble",
+      (_event: any, text: string, duration: number) => callback(text, duration),
+    );
+  },
 });

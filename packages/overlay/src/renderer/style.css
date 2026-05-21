@@ -27,12 +27,77 @@ body {
   animation: pet-idle 0.6s steps(6) infinite;
 }
 
+.state-working {
+  animation: pet-working 0.6s steps(6) infinite;
+}
+
+.state-thinking {
+  animation: pet-thinking 0.6s steps(6) infinite;
+}
+
+.state-waiting {
+  animation: pet-waiting 0.6s steps(6) infinite;
+}
+
+.state-done {
+  animation: pet-done 0.4s steps(4) infinite;
+}
+
+.state-error {
+  animation: pet-error 0.8s steps(8) infinite;
+}
+
 @keyframes pet-idle {
   from {
     background-position: 0 0;
   }
   to {
     background-position: -1152px 0;
+  }
+}
+
+@keyframes pet-working {
+  from {
+    background-position: 0 -1456px;
+  }
+  to {
+    background-position: -1152px -1456px;
+  }
+}
+
+@keyframes pet-thinking {
+  from {
+    background-position: 0 -1664px;
+  }
+  to {
+    background-position: -1152px -1664px;
+  }
+}
+
+@keyframes pet-waiting {
+  from {
+    background-position: 0 -1248px;
+  }
+  to {
+    background-position: -1152px -1248px;
+  }
+}
+
+@keyframes pet-done {
+  from {
+    background-position: 0 -624px;
+  }
+  to {
+    background-position: -768px -624px;
+  }
+}
+
+@keyframes pet-error {
+  from {
+    background-position: 0 -1040px;
+  }
+  to {
+    background-position: -1536px -1040px;
   }
 }
 
