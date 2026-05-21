@@ -9,7 +9,7 @@
     "assets"
   ],
   "scripts": {
-    "dev": "tsc && bun scripts/copy-assets.ts && electron .",
+    "dev": "tsc -b && bun scripts/copy-assets.ts && electron .",
     "dev:watch": "tsc --watch",
     "copy-assets": "bun scripts/copy-assets.ts"
   },
