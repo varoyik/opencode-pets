@@ -27,7 +27,7 @@ plugin (Bun) ──Unix Socket IPC──► overlay (Electron)
 - **`packages/overlay`** — Electron app. Transparent `BrowserWindow`, CSS spritesheet animations, Unix socket IPC server, single-instance lock.
 - **`packages/cli`** — CLI for installing/managing pets (`npx opencode-pets install` etc.).
 
-**Current state (Phase 1 MVP):** The overlay is fully functional. The main process passes the spritesheet path to the preload via `additionalArguments` (Electron's documented pattern for preload data). The preload (`bridge.cts`, CommonJS) reads it from `process.argv` and exposes it via `contextBridge`. The renderer is compiled TypeScript (`.ts` → `.js` via `tsc`). Static assets (`index.html`, `style.css`) are copied by `copy-assets.ts`. IPC and plugin are planned for future phases.
+**Current state (Phase 1 MVP):** The overlay is fully functional with Unix socket IPC and a 6-mood state machine. The main process runs a Unix domain socket IPC server (`ipc-server.ts`) that accepts JSON messages (set_mood, show_bubble, toggle_visibility) and forwards them to the sandboxed renderer via Electron IPC. The preload (`bridge.cts`, CommonJS) exposes `getSpritesheetPath`, `onMoodChanged`, and `onBubble` via `contextBridge`. The renderer is compiled TypeScript (`.ts` → `.js` via `tsc`) and dynamically swaps CSS animation classes in response to mood changes. Static assets (`index.html`, `style.css`) are copied by `copy-assets.ts`. The shared core package (`@opencode-pets/core`) defines the state machine reducer, IPC message types with Zod validation, and pet state types. The plugin package (`Bun.spawn()` + SSE hooks) is planned for the next phase.
 
 ## Conventions
 
@@ -40,29 +40,33 @@ plugin (Bun) ──Unix Socket IPC──► overlay (Electron)
 
 ## Key Files
 
-| File                                       | Purpose                                                                                        |
-| ------------------------------------------ | ---------------------------------------------------------------------------------------------- |
-| `packages/core/src/index.ts`               | Shared domain logic entry (placeholder)                                                        |
-| `packages/overlay/src/main/index.ts`       | Electron app entry — single-instance lock, macOS dock hide, window                             |
-| `packages/overlay/src/main/window.ts`      | `BrowserWindow` factory — transparent, frameless, always-on-top                                |
-| `packages/overlay/src/preload/bridge.cts`  | Preload bridge (CJS) — reads spritesheet path from `process.argv`, exposes via `contextBridge` |
-| `packages/overlay/src/renderer/index.html` | Minimal HTML — pet `<div>`, speech bubble `<div>`                                              |
-| `packages/overlay/src/renderer/style.css`  | CSS `@keyframes` spritesheet animations, bubble styles                                         |
-| `packages/overlay/src/renderer/app.ts`     | Renderer entry (compiled to JS) — loads spritesheet, starts idle                               |
-| `packages/overlay/src/renderer/types.d.ts` | TypeScript declarations for `window.electronAPI`                                               |
-| `packages/overlay/scripts/copy-assets.ts`  | Copies static renderer assets (HTML, CSS) to `dist/`                                           |
-| `pets/code-companion/spritesheet.webp`     | Bundled default pet spritesheet (1536×1872, 8×9 grid, WebP)                                    |
-| `pets/code-companion/pet.json`             | Default pet manifest (name, rows, frame counts, durations)                                     |
-| `openspec/changes/overlay-foundation/`     | Current change artifacts (specs, design, tasks)                                                |
+| File                                       | Purpose                                                                                              |
+| ------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
+| `packages/core/src/index.ts`               | Shared domain logic entry — re-exports types, reducer, and IPC utilities                             |
+| `packages/core/src/states.ts`              | Pet state types — `PetMood`, `PetState`, `PetEvent`, `ALL_MOODS`                                     |
+| `packages/core/src/reducer.ts`             | Pure-function pet state reducer with priority transitions, temp state expiry, idle timeout           |
+| `packages/core/src/ipc.ts`                 | Shared IPC message protocol types (`IpcMessage` discriminated union) + Zod validation                |
+| `packages/overlay/src/main/index.ts`       | Electron app entry — single-instance lock, macOS dock hide, socket server wiring                     |
+| `packages/overlay/src/main/window.ts`      | `BrowserWindow` factory — transparent, frameless, always-on-top                                      |
+| `packages/overlay/src/main/ipc-server.ts`  | Unix domain socket server — receives JSON IPC, validates, forwards to renderer                       |
+| `packages/overlay/src/preload/bridge.cts`  | Preload bridge (CJS) — exposes `getSpritesheetPath`, `onMoodChanged`, `onBubble` via `contextBridge` |
+| `packages/overlay/src/renderer/index.html` | Minimal HTML — pet `<div>`, speech bubble `<div>`                                                    |
+| `packages/overlay/src/renderer/style.css`  | CSS `@keyframes` spritesheet animations for all 6 moods, bubble styles                               |
+| `packages/overlay/src/renderer/app.ts`     | Renderer entry (compiled to JS) — dynamic mood-based CSS class swap, bubble control                  |
+| `packages/overlay/src/renderer/types.d.ts` | TypeScript declarations for `window.electronAPI`                                                     |
+| `packages/overlay/scripts/copy-assets.ts`  | Copies static renderer assets (HTML, CSS) to `dist/`                                                 |
+| `packages/overlay/scripts/test-ipc.ts`    | Manual IPC test script — connects to socket, sends all message types                           |
+| `pets/code-companion/spritesheet.webp`     | Bundled default pet spritesheet (1536×1872, 8×9 grid, WebP)                                          |
+| `pets/code-companion/pet.json`             | Default pet manifest (name, rows, frame counts, durations)                                           |
+| `openspec/changes/ipc-and-state-machine/`  | Current change artifacts (specs, design, tasks)                                                      |
 
 ### Planned (not yet implemented)
 
-| File                                      | Purpose                                          |
-| ----------------------------------------- | ------------------------------------------------ |
-| `packages/core/src/reducer.ts`            | Single source of truth for pet state transitions |
-| `packages/core/src/ipc.ts`                | Shared IPC message protocol types + validation   |
-| `packages/plugin/src/overlay-manager.ts`  | `Bun.spawn()` lifecycle for overlay process      |
-| `packages/overlay/src/main/ipc-server.ts` | Unix socket / named pipe server                  |
+| File                                     | Purpose                                            |
+| ---------------------------------------- | -------------------------------------------------- |
+| `packages/plugin/src/overlay-manager.ts` | `Bun.spawn()` lifecycle for overlay process        |
+| `packages/plugin/src/ipc-client.ts`      | Unix socket / named pipe client (talks to overlay) |
+| `packages/plugin/src/state-deriver.ts`   | SSE events → pet state derivation                  |
 
 ## Instructions
 
