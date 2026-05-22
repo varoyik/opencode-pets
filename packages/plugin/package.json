@@ -7,7 +7,12 @@
   "files": [
     "src"
   ],
+  "dependencies": {
+    "@opencode-ai/plugin": "^1.15.7",
+    "@opencode-pets/core": "workspace:*"
+  },
   "scripts": {
+    "setup": "bash scripts/setup-dev.sh",
     "prepublishOnly": "echo 'placeholder'"
   },
   "author": "varoyik",

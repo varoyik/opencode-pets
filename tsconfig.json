@@ -32,5 +32,9 @@
     "incremental": true,
     "tsBuildInfoFile": "${configDir}/.tsbuildinfo"
   },
-  "references": [{ "path": "packages/core" }, { "path": "packages/overlay" }]
+  "references": [
+    { "path": "packages/core" },
+    { "path": "packages/overlay" },
+    { "path": "packages/plugin" }
+  ]
 }

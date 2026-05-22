@@ -55,7 +55,7 @@ plugin (Bun) ──Unix Socket IPC──► overlay (Electron)
 | `packages/overlay/src/renderer/app.ts`     | Renderer entry (compiled to JS) — dynamic mood-based CSS class swap, bubble control                  |
 | `packages/overlay/src/renderer/types.d.ts` | TypeScript declarations for `window.electronAPI`                                                     |
 | `packages/overlay/scripts/copy-assets.ts`  | Copies static renderer assets (HTML, CSS) to `dist/`                                                 |
-| `packages/overlay/scripts/test-ipc.ts`    | Manual IPC test script — connects to socket, sends all message types                           |
+| `packages/overlay/scripts/test-ipc.ts`     | Manual IPC test script — connects to socket, sends all message types                                 |
 | `pets/code-companion/spritesheet.webp`     | Bundled default pet spritesheet (1536×1872, 8×9 grid, WebP)                                          |
 | `pets/code-companion/pet.json`             | Default pet manifest (name, rows, frame counts, durations)                                           |
 | `openspec/changes/ipc-and-state-machine/`  | Current change artifacts (specs, design, tasks)                                                      |
