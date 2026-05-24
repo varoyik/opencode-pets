@@ -3,23 +3,20 @@ import type { PetMood, PetState, PetEvent } from "@opencode-pets/core";
 
 const IDLE_TIMEOUT_MS = 30_000;
 
-export const SSE_EVENT_TO_PET_EVENT: Record<string, PetEvent["type"]> = {
-  "tool.execute.before": "ToolRunning",
-  "tool.execute.after": "TaskCompleted",
-  "session.next.text.started": "StreamStarted",
-  "session.next.reasoning.started": "StreamStarted",
-  "session.next.text.ended": "StreamEnded",
-  "session.next.reasoning.ended": "StreamEnded",
-  "permission.asked": "PermissionPrompted",
-  "permission.replied": "PermissionResolved",
-  "session.error": "TaskErrored",
-  "session.next.tool.failed": "TaskErrored",
-  "session.idle": "IdleTimeout",
-};
+/**
+ * Structural subset of the SDK's v1 Event type — only the fields we need.
+ * Uses `properties: unknown` because each event member has a different
+ * properties shape, and we cast to the shape we need in the handler.
+ */
+interface SdkEvent {
+  type: string;
+  properties: unknown;
+}
 
-export const RELEVANT_EVENT_TYPES: ReadonlySet<string> = new Set(
-  Object.keys(SSE_EVENT_TO_PET_EVENT),
-);
+interface PartUpdatedProps {
+  part?: { id: string; type: string };
+  delta?: string;
+}
 
 /**
  * Minimal interface for the IPC client — anything with `sendMood()` works.
@@ -33,6 +30,7 @@ export class StateDeriver {
   private state: PetState;
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly ipcClient: IpcClientLike;
+  private activeStreamParts = new Set<string>();
 
   constructor(ipcClient: IpcClientLike) {
     this.ipcClient = ipcClient;
@@ -55,7 +53,46 @@ export class StateDeriver {
     }
   }
 
+  handleSseEvent(event: SdkEvent): void {
+    switch (event.type) {
+      case "message.part.updated": {
+        const { part, delta } = event.properties as PartUpdatedProps;
+
+        if (
+          part === undefined ||
+          (part.type !== "text" && part.type !== "reasoning")
+        ) {
+          return;
+        }
+
+        if (delta !== undefined) {
+          this.activeStreamParts.add(part.id);
+          this.handleEvent({ type: "StreamStarted" });
+        } else {
+          this.activeStreamParts.delete(part.id);
+          if (this.activeStreamParts.size === 0) {
+            this.handleEvent({ type: "StreamEnded" });
+          }
+        }
+        break;
+      }
+      case "permission.updated":
+        this.handleEvent({ type: "PermissionPrompted" });
+        break;
+      case "permission.replied":
+        this.handleEvent({ type: "PermissionResolved" });
+        break;
+      case "session.error":
+        this.handleEvent({ type: "TaskErrored" });
+        break;
+      case "session.idle":
+        this.handleEvent({ type: "IdleTimeout" });
+        break;
+    }
+  }
+
   dispose(): void {
+    this.activeStreamParts.clear();
     if (this.idleTimer !== null) {
       clearTimeout(this.idleTimer);
       this.idleTimer = null;
