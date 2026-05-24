@@ -101,6 +101,7 @@ resolution fails because:
 9. IPC client gets connection errors (Bug F)
 
 **Fix:** Two approaches:
+
 - **Quick:** `setup-dev.sh` must run `bun install` at the target path (with
   workspace protocol replaced by a `file:` or version dependency). This copies
   `@opencode-pets/core` and its transitive dep `zod` into the deployed
@@ -111,36 +112,14 @@ resolution fails because:
 
 ---
 
-## Bug D: Spritesheet path resolves incorrectly in deployed overlay
+## Bug D: Spritesheet path resolves incorrectly in deployed overlay ✅ FIXED
 
-**File:** `packages/overlay/src/main/window.ts` (line 7–10) + `packages/plugin/scripts/setup-dev.sh` (missing spritesheet copy)
+**File:** `packages/overlay/src/main/window.ts` — resolved in Phase 1.7.
 
-**Problem:** The spritesheet path is computed relative to `app.getAppPath()`:
-
-```ts
-const spritesheetPath = path.resolve(
-  appPath,
-  "../../pets/code-companion/spritesheet.webp",
-);
-```
-
-- **Monorepo (works):** `app.getAppPath()` → `.../packages/overlay/` →
-  `../../pets/...` → `.../pets/code-companion/spritesheet.webp` ✓
-- **Deployed (broken):** `app.getAppPath()` → `~/.opencode-pets/overlay/` →
-  `../../pets/...` → `~/.opencode-pets/pets/code-companion/spritesheet.webp` ✗
-
-The actual spritesheet lives at the **monorepo root** (`pets/code-companion/spritesheet.webp`,
-200KB). `setup-dev.sh` copies `packages/overlay/assets/` (which is empty — the
-spritesheet is NOT inside that directory), so the deployed overlay has no
-spritesheet at all. Even if Bug C is fixed and the overlay starts, the pet
-image is blank (no `background-image`).
-
-**Fix:** Two approaches:
-- **Quick:** Copy `pets/` from monorepo root to `~/.opencode-pets/pets/` in
-  `setup-dev.sh`, matching the `../../pets/` path resolution.
-- **Proper:** Bundle the spritesheet into the overlay's assets directory
-  (e.g., `packages/overlay/assets/spritesheet.webp`) and change `window.ts`
-  to resolve relative to `appPath` instead of `../../`.
+**Fix applied:** Spritesheets moved from monorepo root `pets/` to `packages/overlay/assets/pets/`.
+Path in `window.ts` changed from `../../pets/code-companion/spritesheet.webp` to
+`assets/pets/claude-crab/spritesheet.webp` — a relative path from `app.getAppPath()` that
+works identically in both monorepo dev and deployed `~/.opencode-pets/overlay/`.
 
 ---
 
@@ -170,6 +149,7 @@ socket file with a **5-second timeout**. This is too short because:
 6. State deriver sends events → `ipc-client` tries connecting → errors
 
 **Fix:** Two changes:
+
 1. Increase timeout to at least 15s (Electron cold-start can take 5–10s).
 2. Don't kill the overlay on timeout — the `IpcClient` has its own
    exponential-backoff reconnection logic. Let it handle late socket binding.
@@ -203,9 +183,9 @@ fragile. It doesn't handle:
 
 - **Dependency resolution** — compiled JS expects `@opencode-pets/core` in
   `node_modules`, but `node_modules` is never deployed.
-- **Asset bundling** — the spritesheet lives at the monorepo root and is
+- **Asset bundling** — ~~the spritesheet lives at the monorepo root and is
   referenced via a fragile relative path (`../../pets/...`) that only works
-  inside the monorepo directory structure.
+  inside the monorepo directory structure.~~ ✅ Fixed in Phase 1.7: pets now live in `packages/overlay/assets/pets/`.
 - **Process spawning** — relying on `npx electron .` at the deployed path adds
   startup latency and intermediate failure modes.
 
