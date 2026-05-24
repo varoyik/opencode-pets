@@ -10,6 +10,7 @@ body {
   height: 100%;
   overflow: hidden;
   background: transparent;
+  -webkit-app-region: drag;
 }
 
 #pet {
