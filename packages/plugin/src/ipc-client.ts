@@ -108,6 +108,10 @@ export class IpcClient {
           this.retryCount = 0;
           this.flushQueue();
         },
+        data: () => {
+          // No-op: IpcClient is write-only, but Bun requires at least
+          // data or drain callback for Unix socket connections.
+        },
         close: (_socket, error) => {
           this.socket = null;
           if (error) {
