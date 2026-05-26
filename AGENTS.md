@@ -27,7 +27,7 @@ plugin (Bun) ──Unix Socket IPC──► overlay (Electron)
 - **`packages/overlay`** — Electron app. Transparent `BrowserWindow`, CSS spritesheet animations, Unix socket IPC server, single-instance lock.
 - **`packages/cli`** — CLI for installing/managing pets (`npx opencode-pets install` etc.).
 
-**Current state (Phase 1 MVP):** All four packages are implemented. The overlay is fully functional with Unix socket IPC and a 6-mood state machine. The main process runs a Unix domain socket IPC server (`ipc-server.ts`) that accepts JSON messages (set_mood, show_bubble, toggle_visibility) and forwards them to the sandboxed renderer via Electron IPC. The preload (`bridge.cts`, CommonJS) exposes `getSpritesheetPath`, `onMoodChanged`, and `onBubble` via `contextBridge`. The renderer is compiled TypeScript (`.ts` → `.js` via `tsc`) and dynamically swaps CSS animation classes in response to mood changes. The shared core package (`@opencode-pets/core`) defines the state machine reducer, IPC message types with Zod validation, and pet state types. The plugin package (`packages/plugin/`) is fully implemented: `Bun.spawn()` launches the overlay from `~/.opencode-pets/overlay/`, an IPC client connects via Unix socket, a state-deriver maps OpenCode SSE events to pet states, and a `/pet` slash command toggles overlay visibility. **Known deployment issues** (module resolution, spritesheet path, health-check timing, IPC client callback) are documented in `KNOWN-ISSUES.md` — to be resolved post-MVP.
+**Current state (Phase 1 MVP):** All four packages are implemented. The overlay is fully functional with Unix socket IPC and a 6-mood state machine. The main process runs a Unix domain socket IPC server (`ipc-server.ts`) that accepts JSON messages (set_mood, show_bubble, toggle_visibility) and forwards them to the sandboxed renderer via Electron IPC. The preload (`bridge.cts`, CommonJS) exposes `getSpritesheetPath`, `onMoodChanged`, and `onBubble` via `contextBridge`. The renderer is compiled TypeScript (`.ts` → `.js` via `tsc`) and dynamically swaps CSS animation classes in response to mood changes. The shared core package (`@opencode-pets/core`) defines the state machine reducer, IPC message types with Zod validation, and pet state types. The plugin package (`packages/plugin/`) is fully implemented: `Bun.spawn()` launches the overlay from `~/.opencode-pets/overlay/` (deps resolved via `bun install` in `setup-dev.sh`, Electron symlinked from monorepo), an IPC client connects via Unix socket, a state-deriver maps OpenCode SSE events to pet states, and a `/pet` slash command toggles overlay visibility. All deployment-related known issues (C–F) are resolved; minor bugs (A, B) remain in the overlay IPC server.
 
 ## Conventions
 
@@ -60,14 +60,14 @@ plugin (Bun) ──Unix Socket IPC──► overlay (Electron)
 | `packages/plugin/src/ipc-client.ts`                         | Bun Unix socket client — lazy connect, NDJSON serialization, exponential backoff reconnection        |
 | `packages/plugin/src/state-deriver.ts`                      | SSE events → PetEvent mapping → core reducer → IPC mood sync, 30s idle timeout                       |
 | `packages/plugin/src/overlay-manager.ts`                    | `Bun.spawn()` overlay lifecycle — resolve path, spawn, health check, kill                            |
-| `packages/plugin/scripts/setup-dev.sh`                      | Copies overlay build output to `~/.opencode-pets/overlay/` for local development                     |
+| `packages/plugin/scripts/setup-dev.sh`                      | Copies overlay build to `~/.opencode-pets/overlay/`, runs `bun install`, symlinks Electron           |
 | `packages/plugin/scripts/test-plugin.ts`                    | Manual test — creates IpcClient, sends mood/bubble/visibility, verifies overlay IPC                  |
 | `packages/overlay/assets/pets/claude-crab/spritesheet.webp` | Bundled default pet spritesheet (1536×1872, 8×9 grid, WebP)                                          |
 | `packages/overlay/assets/pets/claude-crab/pet.json`         | Default pet manifest (name, rows, frame counts, durations)                                           |
 | `packages/overlay/assets/pets/gutsy/spritesheet.webp`       | Bundled pet spritesheet                                                                              |
 | `packages/overlay/assets/pets/nezukocoder/spritesheet.webp` | Bundled pet spritesheet                                                                              |
-| `KNOWN-ISSUES.md`                                           | Tracked bugs (socket stop hang, chmod race, deployment module resolution, spritesheet path)          |
-| `openspec/changes/opencode-plugin/`                         | Current change artifacts — proposal, design, specs, tasks for Phase 1.5 plugin implementation        |
+| `KNOWN-ISSUES.md`                                           | Tracked bugs (socket stop hang, chmod race)                                                          |
+| `openspec/specs/`                                           | Main spec files — 8 capabilities covering the full MVP                                               |
 
 ## Instructions
 

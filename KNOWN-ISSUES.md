@@ -76,10 +76,11 @@ server.listen(socketPath, () => {
 **File:** `packages/plugin/scripts/setup-dev.sh` — fixed via `bun install` at deploy path.
 
 **Fix applied:** `setup-dev.sh` now replaces the `workspace:*` protocol with a `file:`
-dependency pointing back to the monorepo's `packages/core`, then runs `bun install`
-in `~/.opencode-pets/overlay/`. This creates `node_modules/@opencode-pets/core` as a
-symlink and resolves its transitive dep `zod`. The overlay spawns via
-`node_modules/.bin/electron` (not `npx electron`) for faster cold-start.
+dependency pointing back to the monorepo's `packages/core`, strips `electron` from
+`package.json` (to avoid Node.js v24 extract-zip bug, Electron issue #51619), runs
+`bun install` for `@opencode-pets/core` + `zod` only, then symlinks `electron/` from
+the monorepo and creates `node_modules/.bin/electron` pointing to the binary.
+The overlay spawns via `node_modules/.bin/electron` (no `npx` overhead).
 
 ---
 
@@ -99,6 +100,7 @@ works identically in both monorepo dev and deployed `~/.opencode-pets/overlay/`.
 **File:** `packages/plugin/src/overlay-manager.ts` — `healthCheck()` timeout and `startOverlay()` kill logic.
 
 **Fix applied:**
+
 1. Health check timeout increased from 5s → 15s (Electron cold-start can take 5–10s).
 2. `startOverlay()` no longer kills the overlay on timeout — it returns the process
    and lets the `IpcClient`'s exponential-backoff reconnection handle late socket binding.
@@ -121,7 +123,8 @@ socket connections, even when the client is write-only.
 
 All deployment-related bugs (C, D, E, F) are now fixed. The loose-files approach
 works reliably for development:
-- `setup-dev.sh` copies `dist/`, `assets/`, `package.json` → runs `bun install` → resolves deps
+
+- `setup-dev.sh` copies `dist/`, `assets/`, `package.json` → strips electron → runs `bun install` → symlinks electron + .bin
 - Overlay spawns via `node_modules/.bin/electron` (no `npx` overhead)
 - Health check timeout is 15s; failure is non-fatal (IPC client retries)
 - Spritesheets live in `packages/overlay/assets/pets/` — same relative path works everywhere
