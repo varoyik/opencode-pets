@@ -3,9 +3,10 @@ import { IpcClient } from "./ipc-client.js";
 import { startOverlay, killOverlay } from "./overlay-manager.js";
 import { StateDeriver } from "./state-deriver.js";
 
-const petPlugin: Plugin = async (_input) => {
+const petPlugin: Plugin = async (input) => {
   const uid = typeof process.getuid === "function" ? process.getuid() : 1000;
   const socketPath = `/tmp/opencode-pets-${uid}/opencode-pets.sock`;
+  const client = input.client;
 
   const ipcClient = new IpcClient(socketPath);
   const stateDeriver = new StateDeriver(ipcClient);
@@ -18,7 +19,7 @@ const petPlugin: Plugin = async (_input) => {
         config.command = {};
       }
       config.command["pet"] = {
-        template: "_",
+        template: "__PET_COMMAND__",
         description: "Show or hide the virtual pet overlay",
       };
     },
@@ -51,24 +52,33 @@ const petPlugin: Plugin = async (_input) => {
       stateDeriver.handleEvent({ type: "TaskCompleted" });
     },
 
-    "command.execute.before": async (input, output) => {
-      if (input.command !== "pet") return;
+    "command.execute.before": async (cmdInput, _output) => {
+      if (cmdInput.command !== "pet") return;
 
       if (!overlayStarted) {
-        output.parts.length = 0;
-        output.parts.push({
-          type: "text",
-          text: "Pet overlay is not running. It may have been closed.",
-        } as any);
-        return;
+        throw new Error("Pet overlay is not running. It may have been closed.");
       }
 
       ipcClient.toggleVisibility();
-      output.parts.length = 0;
-      output.parts.push({
-        type: "text",
-        text: "Pet visibility toggled.",
-      } as any);
+
+      // Inject noReply message (chat entry, no LLM trigger).
+      // Throw __PET_HANDLED__ to abort command flow — prevents LLM
+      // from processing /pet.
+      await client.session.prompt({
+        path: { id: cmdInput.sessionID },
+        body: {
+          noReply: true,
+          parts: [
+            {
+              type: "text",
+              text: "Pet visibility toggled.",
+              ignored: true,
+            },
+          ],
+        },
+      });
+
+      throw new Error("__PET_HANDLED__");
     },
   };
 };
