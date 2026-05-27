@@ -119,6 +119,57 @@ socket connections, even when the client is write-only.
 
 ---
 
+## Bug G: Drag reposition and position persistence broken on Linux
+
+**File:** `packages/overlay/src/renderer/style.css` (`-webkit-app-region: drag`) + `packages/overlay/src/main/window.ts` (`win.on("moved")` + `focusable`)
+
+**Problem:** Two separate issues:
+
+1. **Drag doesn't work on Wayland** — `-webkit-app-region: drag` is a Chromium API that relies on the X11 window manager protocol. On Wayland compositors (Hyprland, etc.), this API doesn't register with the compositor, so clicks on the pet do nothing — the window can't be moved.
+
+2. **Drag works poorly on Linux X11** — Even on X11, Electron requires `focusable: true` for `-webkit-app-region: drag` to function. But setting `focusable: true` makes the overlay steal keyboard focus from the user's editor/terminal — defeating the "pet shouldn't steal focus" design goal.
+
+3. **Position persistence never saves** — `win.on("moved")` relies on the window manager reporting position changes back to Electron. On many Linux WMs (both Wayland and X11), this event either fires late or never fires at all, so the position file at `~/.config/opencode-pets/position.json` is never written. On next launch, there's nothing to restore, and the pet resets to the default position.
+
+**Trace (drag + persistence failure on Wayland):**
+
+1. `style.css` sets `-webkit-app-region: drag` on `#pet`
+2. User clicks and drags the pet
+3. Wayland compositor doesn't understand `-webkit-app-region` — no drag starts
+4. `win.on("moved")` never fires
+5. `mkdirSync + writeFileSync` in the handler never executes
+6. `~/.config/opencode-pets/position.json` is never created
+7. On next launch, `existsSync(POSITION_FILE)` is `false` — pet appears at default position
+
+**Fix:** Replace `-webkit-app-region: drag` with IPC-based manual drag in the renderer:
+
+```
+Renderer:                           Main Process:
+  mousedown on #pet                  ipcMain.on("drag-delta")
+    → start tracking                   → win.setPosition(x+dx, y+dy)
+  mousemove                           → save position to file
+    → sendDragDelta(dx, dy) ──────►
+  mouseup
+    → stop tracking
+```
+
+This approach:
+
+- Works on all platforms (Wayland, X11, macOS, Windows) — no WM dependency
+- Keeps `focusable: false` — pet never steals keyboard focus
+- Saves position synchronously after each `setPosition()` — no `moved` event dependency
+- Can be debounced (e.g., save every 300ms) to avoid thrashing the filesystem during fast drags
+
+**Files to change:**
+
+- `packages/overlay/src/preload/bridge.cts` — expose `sendDragDelta(dx, dy)` via `ipcRenderer.send()`
+- `packages/overlay/src/renderer/types.d.ts` — add `sendDragDelta` to the `IElectronAPI` type
+- `packages/overlay/src/renderer/app.ts` — add mousedown/mousemove/mouseup drag handlers
+- `packages/overlay/src/renderer/style.css` — remove `-webkit-app-region: drag` from `#pet`, add `cursor: grab`
+- `packages/overlay/src/main/window.ts` — add `ipcMain.on("drag-delta")` handler, revert `focusable` to `false`
+
+---
+
 ## Architectural Note: `~/.opencode-pets/overlay/` deployment model
 
 All deployment-related bugs (C, D, E, F) are now fixed. The loose-files approach
