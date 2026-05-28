@@ -59,7 +59,7 @@ plugin (Bun) ──Unix Socket IPC──► overlay (Electron)
 | `packages/plugin/src/index.ts`                              | Plugin entry — composes hooks (event, tool, command), spawns overlay, manages lifecycle              |
 | `packages/plugin/src/ipc-client.ts`                         | Bun Unix socket client — lazy connect, NDJSON serialization, exponential backoff reconnection        |
 | `packages/plugin/src/state-deriver.ts`                      | SSE events → PetEvent mapping → core reducer → IPC mood sync, 30s idle timeout                       |
-| `packages/plugin/src/overlay-manager.ts`                    | `Bun.spawn()` overlay lifecycle — resolve path, spawn, health check, kill                            |
+| `packages/plugin/src/overlay-manager.ts`                    | `Bun.spawn()` overlay lifecycle — resolve path, spawn, kill                                          |
 | `packages/plugin/scripts/setup-dev.sh`                      | Copies overlay build to `~/.opencode-pets/overlay/`, runs `bun install`, symlinks Electron           |
 | `packages/plugin/scripts/test-plugin.ts`                    | Manual test — creates IpcClient, sends mood/bubble/visibility, verifies overlay IPC                  |
 | `packages/overlay/assets/pets/claude-crab/spritesheet.webp` | Bundled default pet spritesheet (1536×1872, 8×9 grid, WebP)                                          |

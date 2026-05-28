@@ -1,6 +1,7 @@
+import type { Subprocess } from "bun";
 import type { Plugin } from "@opencode-ai/plugin";
 import { IpcClient } from "./ipc-client.js";
-import { startOverlay, killOverlay } from "./overlay-manager.js";
+import { spawnOverlay, killOverlay } from "./overlay-manager.js";
 import { StateDeriver } from "./state-deriver.js";
 
 const petPlugin: Plugin = async (input) => {
@@ -10,8 +11,7 @@ const petPlugin: Plugin = async (input) => {
 
   const ipcClient = new IpcClient(socketPath);
   const stateDeriver = new StateDeriver(ipcClient);
-  const overlayProcess = await startOverlay(socketPath);
-  const overlayStarted = overlayProcess !== undefined;
+  let overlayProcess: Subprocess | null = null;
 
   return {
     config: async (config) => {
@@ -55,11 +55,16 @@ const petPlugin: Plugin = async (input) => {
     "command.execute.before": async (cmdInput, _output) => {
       if (cmdInput.command !== "pet") return;
 
-      if (!overlayStarted) {
-        throw new Error("Pet overlay is not running. It may have been closed.");
+      let message: string;
+      if (overlayProcess === null || overlayProcess.exitCode !== null) {
+        // Spawn on first use or after crash. Window auto-shows.
+        overlayProcess = spawnOverlay();
+        message = "Pet overlay launched.";
+      } else {
+        // Already running → toggle visibility
+        ipcClient.toggleVisibility();
+        message = "Pet visibility toggled.";
       }
-
-      ipcClient.toggleVisibility();
 
       // Inject noReply message (chat entry, no LLM trigger).
       // Throw __PET_HANDLED__ to abort command flow — prevents LLM
@@ -71,7 +76,7 @@ const petPlugin: Plugin = async (input) => {
           parts: [
             {
               type: "text",
-              text: "Pet visibility toggled.",
+              text: message,
               ignored: true,
             },
           ],
