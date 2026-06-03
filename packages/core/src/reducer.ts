@@ -1,48 +1,40 @@
 import type { PetMood, PetState, PetEvent } from "./states.js";
 
-const PRIORITY: Record<PetMood, number> = {
-  idle: 1,
-  thinking: 2,
-  working: 3,
-  waiting: 4,
-  done: 5,
-  error: 5,
-};
-
 const DONE_DURATION_MS = 3000;
 const ERROR_DURATION_MS = 5000;
-
-const EVENT_TO_MOOD: Record<
-  Exclude<PetEvent["type"], "PermissionResolved" | "IdleTimeout">,
-  PetMood
-> = {
-  AgentStarted: "working",
-  ToolRunning: "working",
-  StreamStarted: "thinking",
-  StreamEnded: "idle",
-  TaskCompleted: "done",
-  TaskErrored: "error",
-  PermissionPrompted: "waiting",
-};
-
-const TEMPORARY_DURATIONS: Partial<Record<PetMood, number>> = {
-  done: DONE_DURATION_MS,
-  error: ERROR_DURATION_MS,
-};
 
 export const INITIAL_STATE: PetState = {
   mood: "idle",
   previousMood: "idle",
+  activeStreams: 0,
+  activeTools: 0,
+  waitingPermission: false,
 };
+
+/**
+ * Derive the base mood from context counters.
+ * Ordered: permission > tools > streams > idle
+ */
+function deriveMood(
+  state: Pick<PetState, "activeStreams" | "activeTools" | "waitingPermission">,
+): PetMood {
+  if (state.waitingPermission) return "waiting";
+  if (state.activeTools > 0) return "working";
+  if (state.activeStreams > 0) return "thinking";
+  return "idle";
+}
 
 /**
  * Pure-function pet state reducer.
  *
- * Transitions are governed by priority rules:
- * - Higher-priority states override lower-priority ones
- * - IdleTimeout and StreamEnded can downgrade from thinking/idle to idle
- * - PermissionResolved reverts to the previous mood
- * - Temporary states (done, error) auto-expire after their duration
+ * Derives mood from active session context:
+ * - waitingPermission → waiting
+ * - activeTools > 0 → working
+ * - activeStreams > 0 → thinking
+ * - else → idle
+ *
+ * Temporary states (done, error) override the derived mood while active.
+ * Counter changes are applied first, then mood is re-derived.
  */
 export function reducer(state: PetState, event: PetEvent): PetState {
   const now = Date.now();
@@ -52,70 +44,112 @@ export function reducer(state: PetState, event: PetEvent): PetState {
     state.expiresAt !== undefined &&
     now >= state.expiresAt
   ) {
+    const derived = deriveMood(state);
+    const { temporary: _tmp, expiresAt: _exp, ...rest } = state;
     const reverted: PetState = {
-      mood: state.previousMood,
+      ...rest,
+      mood: derived,
       previousMood: state.mood,
     };
     return reducer(reverted, event);
   }
 
+  // IdleTimeout: only transition to idle when all counters are zero
+  // and no temporary state is active
   if (event.type === "IdleTimeout") {
-    if (state.mood === "idle") {
+    if (state.temporary) {
       return state;
     }
-    const currentPriority = PRIORITY[state.mood];
-    if (currentPriority <= PRIORITY.thinking) {
-      return { mood: "idle", previousMood: state.mood };
+    if (
+      state.activeStreams === 0 &&
+      state.activeTools === 0 &&
+      !state.waitingPermission
+    ) {
+      if (state.mood === "idle") return state;
+      return {
+        ...state,
+        mood: "idle",
+        previousMood: state.mood,
+      };
     }
     return state;
   }
 
-  if (event.type === "PermissionResolved") {
-    const fallback: PetMood =
-      state.previousMood === state.mood ? "idle" : state.previousMood;
-    if (state.mood !== "waiting") {
-      return state;
+  let nextState = { ...state };
+
+  switch (event.type) {
+    case "StreamStarted":
+      nextState.activeStreams += 1;
+      break;
+    case "StreamEnded":
+      nextState.activeStreams = Math.max(0, nextState.activeStreams - 1);
+      break;
+    case "ToolRunning":
+      nextState.activeTools += 1;
+      break;
+    case "ToolCompleted":
+      nextState.activeTools = Math.max(0, nextState.activeTools - 1);
+      break;
+    case "PermissionPrompted":
+      nextState.waitingPermission = true;
+      break;
+    case "PermissionResolved":
+      nextState.waitingPermission = false;
+      break;
+    case "SessionCompleted":
+      nextState.activeStreams = 0;
+      nextState.activeTools = 0;
+      nextState.waitingPermission = false;
+      break;
+    case "TaskErrored":
+      nextState.activeStreams = 0;
+      nextState.activeTools = 0;
+      nextState.waitingPermission = false;
+      break;
+  }
+
+  const derivedMood = deriveMood(nextState);
+
+  if (event.type === "SessionCompleted") {
+    // Don't override an active error state with done.
+    // session.idle often fires even after session.error.
+    if (state.mood === "error") {
+      return nextState;
     }
     return {
-      mood: fallback,
-      previousMood: state.mood,
-    };
-  }
-
-  const targetMood: PetMood = EVENT_TO_MOOD[event.type];
-  const currentPriority = PRIORITY[state.mood];
-  const targetPriority = PRIORITY[targetMood];
-
-  if (targetPriority >= currentPriority) {
-    return applyTransition(state, targetMood, now);
-  }
-
-  if (event.type === "StreamEnded" && currentPriority <= PRIORITY.thinking) {
-    return { mood: "idle", previousMood: state.mood };
-  }
-
-  return state;
-}
-
-function applyTransition(
-  state: PetState,
-  targetMood: PetMood,
-  now: number,
-): PetState {
-  if (targetMood === state.mood) {
-    return state;
-  }
-  const duration = TEMPORARY_DURATIONS[targetMood];
-  if (duration !== undefined) {
-    return {
-      mood: targetMood,
+      ...nextState,
+      mood: "done",
       previousMood: state.mood,
       temporary: true,
-      expiresAt: now + duration,
+      expiresAt: now + DONE_DURATION_MS,
     };
   }
-  return {
-    mood: targetMood,
-    previousMood: state.mood,
-  };
+
+  if (event.type === "TaskErrored") {
+    return {
+      ...nextState,
+      mood: "error",
+      previousMood: state.mood,
+      temporary: true,
+      expiresAt: now + ERROR_DURATION_MS,
+    };
+  }
+
+  // For all other events, set mood to derived mood
+  // (temporary states are still active if they haven't expired — handled above)
+  if (state.temporary) {
+    // While temporary is active, keep the temporary mood but update counters
+    // The expiry check at the top will revert when time is up
+    if (nextState.mood !== state.mood) {
+      nextState.previousMood = state.mood;
+    }
+    return nextState;
+  }
+
+  if (derivedMood !== state.mood) {
+    nextState.mood = derivedMood;
+    nextState.previousMood = state.mood;
+  }
+
+  return nextState;
 }

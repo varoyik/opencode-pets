@@ -12,11 +12,11 @@ const ALL_MOODS: PetMood[] = [
 ];
 
 const ALL_EVENTS: PetEvent["type"][] = [
-  "AgentStarted",
   "ToolRunning",
+  "ToolCompleted",
   "StreamStarted",
   "StreamEnded",
-  "TaskCompleted",
+  "SessionCompleted",
   "TaskErrored",
   "PermissionPrompted",
   "PermissionResolved",
@@ -30,6 +30,9 @@ function makeState(
   return {
     mood,
     previousMood: overrides?.previousMood ?? "idle",
+    activeStreams: overrides?.activeStreams ?? 0,
+    activeTools: overrides?.activeTools ?? 0,
+    waitingPermission: overrides?.waitingPermission ?? false,
     ...(overrides?.temporary !== undefined
       ? { temporary: overrides.temporary }
       : {}),
@@ -46,25 +49,24 @@ function evt(type: PetEvent["type"]): PetEvent {
 describe("reducer purity", () => {
   it("returns a new object (not same reference)", () => {
     const state = makeState("idle");
-    const next = reducer(state, evt("AgentStarted"));
+    const next = reducer(state, evt("StreamStarted"));
     expect(next).not.toBe(state);
   });
 
   it("does not mutate the input state", () => {
     const state = makeState("idle");
     const frozen = JSON.stringify(state);
-    reducer(state, evt("AgentStarted"));
+    reducer(state, evt("StreamStarted"));
     expect(JSON.stringify(state)).toBe(frozen);
   });
 });
 
 describe("event → target mood", () => {
   const mappings: [PetEvent["type"], PetMood][] = [
-    ["AgentStarted", "working"],
     ["ToolRunning", "working"],
     ["StreamStarted", "thinking"],
     ["StreamEnded", "idle"],
-    ["TaskCompleted", "done"],
+    ["SessionCompleted", "done"],
     ["TaskErrored", "error"],
     ["PermissionPrompted", "waiting"],
   ];
@@ -78,61 +80,133 @@ describe("event → target mood", () => {
   }
 });
 
-describe("priority rules", () => {
-  it("error cannot be overridden by working (AgentStarted)", () => {
-    const state = makeState("error", { previousMood: "working" });
-    const next = reducer(state, evt("AgentStarted"));
-    expect(next.mood).toBe("error");
+describe("context-aware derivation", () => {
+  it("waiting overrides active tools", () => {
+    const state = makeState("working", {
+      activeTools: 2,
+      waitingPermission: true,
+    });
+    const next = reducer(state, evt("ToolRunning"));
+    expect(next.mood).toBe("waiting");
   });
 
-  it("error cannot be overridden by thinking (StreamStarted)", () => {
-    const state = makeState("error", { previousMood: "idle" });
-    const next = reducer(state, evt("StreamStarted"));
-    expect(next.mood).toBe("error");
-  });
-
-  it("waiting cannot be overridden by thinking (StreamStarted)", () => {
-    const state = makeState("waiting", { previousMood: "idle" });
+  it("waiting overrides active streams", () => {
+    const state = makeState("thinking", {
+      activeStreams: 1,
+      waitingPermission: true,
+    });
     const next = reducer(state, evt("StreamStarted"));
     expect(next.mood).toBe("waiting");
   });
 
-  it("waiting cannot be overridden by idle (StreamEnded from waiting)", () => {
-    const state = makeState("waiting", { previousMood: "idle" });
+  it("active tools override active streams", () => {
+    const state = makeState("thinking", {
+      activeStreams: 1,
+      activeTools: 1,
+    });
+    const next = reducer(state, evt("StreamStarted"));
+    expect(next.mood).toBe("working");
+  });
+
+  it("active streams show thinking", () => {
+    const state = makeState("thinking", { activeStreams: 1 });
+    const next = reducer(state, evt("IdleTimeout"));
+    expect(next.mood).toBe("thinking");
+  });
+
+  it("no activity shows idle", () => {
+    const state = makeState("thinking", {
+      activeStreams: 1,
+      previousMood: "idle",
+    });
     const next = reducer(state, evt("StreamEnded"));
-    expect(next.mood).toBe("waiting");
+    expect(next.mood).toBe("idle");
+    expect(next.previousMood).toBe("thinking");
   });
+});
 
-  it("working cannot be overridden by thinking (StreamStarted)", () => {
-    const state = makeState("working", { previousMood: "idle" });
+describe("counter changes", () => {
+  it("StreamStarted increments activeStreams", () => {
+    const state = makeState("idle", { activeStreams: 1 });
     const next = reducer(state, evt("StreamStarted"));
-    expect(next.mood).toBe("working");
+    expect(next.activeStreams).toBe(2);
   });
 
-  it("working can be overridden by waiting (PermissionPrompted)", () => {
-    const state = makeState("working", { previousMood: "idle" });
+  it("StreamEnded decrements activeStreams", () => {
+    const state = makeState("thinking", { activeStreams: 2 });
+    const next = reducer(state, evt("StreamEnded"));
+    expect(next.activeStreams).toBe(1);
+  });
+
+  it("StreamEnded does not go below 0", () => {
+    const state = makeState("idle");
+    const next = reducer(state, evt("StreamEnded"));
+    expect(next.activeStreams).toBe(0);
+  });
+
+  it("ToolRunning increments activeTools", () => {
+    const state = makeState("idle");
+    const next = reducer(state, evt("ToolRunning"));
+    expect(next.activeTools).toBe(1);
+  });
+
+  it("ToolCompleted decrements activeTools", () => {
+    const state = makeState("working", { activeTools: 2 });
+    const next = reducer(state, evt("ToolCompleted"));
+    expect(next.activeTools).toBe(1);
+  });
+
+  it("ToolCompleted does not go below 0", () => {
+    const state = makeState("idle");
+    const next = reducer(state, evt("ToolCompleted"));
+    expect(next.activeTools).toBe(0);
+  });
+
+  it("PermissionPrompted sets waitingPermission", () => {
+    const state = makeState("idle");
     const next = reducer(state, evt("PermissionPrompted"));
-    expect(next.mood).toBe("waiting");
-    expect(next.previousMood).toBe("working");
+    expect(next.waitingPermission).toBe(true);
   });
 
-  it("working can be overridden by error (TaskErrored)", () => {
-    const state = makeState("working", { previousMood: "idle" });
+  it("PermissionResolved clears waitingPermission", () => {
+    const state = makeState("waiting", { waitingPermission: true });
+    const next = reducer(state, evt("PermissionResolved"));
+    expect(next.waitingPermission).toBe(false);
+  });
+
+  it("SessionCompleted resets all counters", () => {
+    const state = makeState("working", {
+      activeStreams: 2,
+      activeTools: 3,
+      waitingPermission: true,
+    });
+    const next = reducer(state, evt("SessionCompleted"));
+    expect(next.activeStreams).toBe(0);
+    expect(next.activeTools).toBe(0);
+    expect(next.waitingPermission).toBe(false);
+  });
+
+  it("TaskErrored resets all counters", () => {
+    const state = makeState("working", {
+      activeStreams: 1,
+      activeTools: 2,
+      waitingPermission: true,
+    });
     const next = reducer(state, evt("TaskErrored"));
-    expect(next.mood).toBe("error");
-    expect(next.temporary).toBe(true);
-  });
-
-  it("thinking can be overridden by working (AgentStarted)", () => {
-    const state = makeState("thinking", { previousMood: "idle" });
-    const next = reducer(state, evt("AgentStarted"));
-    expect(next.mood).toBe("working");
+    expect(next.activeStreams).toBe(0);
+    expect(next.activeTools).toBe(0);
+    expect(next.waitingPermission).toBe(false);
   });
 });
 
 describe("idle timeout", () => {
-  it("resets thinking to idle", () => {
-    const state = makeState("thinking", { previousMood: "idle" });
+  it("resets thinking to idle when no counters", () => {
+    const state = makeState("thinking", {
+      previousMood: "idle",
+      activeStreams: 0,
+      activeTools: 0,
+      waitingPermission: false,
+    });
     const next = reducer(state, evt("IdleTimeout"));
     expect(next.mood).toBe("idle");
     expect(next.previousMood).toBe("thinking");
@@ -144,63 +218,72 @@ describe("idle timeout", () => {
     expect(next.mood).toBe("idle");
   });
 
-  it("does not override working", () => {
-    const state = makeState("working", { previousMood: "idle" });
+  it("does not override working when tools active", () => {
+    const state = makeState("working", {
+      previousMood: "idle",
+      activeTools: 1,
+    });
     const next = reducer(state, evt("IdleTimeout"));
     expect(next.mood).toBe("working");
   });
 
   it("does not override waiting", () => {
-    const state = makeState("waiting", { previousMood: "idle" });
+    const state = makeState("waiting", {
+      previousMood: "idle",
+      waitingPermission: true,
+    });
     const next = reducer(state, evt("IdleTimeout"));
     expect(next.mood).toBe("waiting");
   });
 
-  it("does not override error", () => {
-    const state = makeState("error", { previousMood: "idle" });
+  it("does not override thinking when streams active", () => {
+    const state = makeState("thinking", {
+      previousMood: "idle",
+      activeStreams: 1,
+    });
+    const next = reducer(state, evt("IdleTimeout"));
+    expect(next.mood).toBe("thinking");
+  });
+
+  it("does not override error (temporary)", () => {
+    const state = makeState("error", {
+      previousMood: "idle",
+      temporary: true,
+      expiresAt: Date.now() + 60_000,
+    });
     const next = reducer(state, evt("IdleTimeout"));
     expect(next.mood).toBe("error");
   });
 });
 
-describe("StreamEnded downgrade", () => {
-  it("transitions from thinking to idle", () => {
-    const state = makeState("thinking", { previousMood: "idle" });
-    const next = reducer(state, evt("StreamEnded"));
-    expect(next.mood).toBe("idle");
-    expect(next.previousMood).toBe("thinking");
-  });
-
-  it("no-op when already idle", () => {
-    const state = makeState("idle", { previousMood: "idle" });
-    const next = reducer(state, evt("StreamEnded"));
-    expect(next.mood).toBe("idle");
-  });
-
-  it("does not override working", () => {
-    const state = makeState("working", { previousMood: "idle" });
-    const next = reducer(state, evt("StreamEnded"));
-    expect(next.mood).toBe("working");
-  });
-});
-
 describe("PermissionResolved", () => {
-  it("reverts from waiting to previous mood (working)", () => {
-    const state = makeState("waiting", { previousMood: "working" });
+  it("reverts from waiting to derived mood (working)", () => {
+    const state = makeState("waiting", {
+      previousMood: "idle",
+      activeTools: 1,
+      waitingPermission: true,
+    });
     const next = reducer(state, evt("PermissionResolved"));
     expect(next.mood).toBe("working");
     expect(next.previousMood).toBe("waiting");
   });
 
-  it("reverts from waiting to previous mood (thinking)", () => {
-    const state = makeState("waiting", { previousMood: "thinking" });
+  it("reverts from waiting to derived mood (thinking)", () => {
+    const state = makeState("waiting", {
+      previousMood: "idle",
+      activeStreams: 1,
+      waitingPermission: true,
+    });
     const next = reducer(state, evt("PermissionResolved"));
     expect(next.mood).toBe("thinking");
     expect(next.previousMood).toBe("waiting");
   });
 
-  it("falls back to idle when previous mood is also waiting", () => {
-    const state = makeState("waiting", { previousMood: "waiting" });
+  it("reverts from waiting to idle when no activity", () => {
+    const state = makeState("waiting", {
+      previousMood: "waiting",
+      waitingPermission: true,
+    });
     const next = reducer(state, evt("PermissionResolved"));
     expect(next.mood).toBe("idle");
   });
@@ -213,40 +296,49 @@ describe("PermissionResolved", () => {
 });
 
 describe("temporary state expiry", () => {
-  it("done reverts to previous mood after expiry", () => {
+  it("done reverts to derived mood after expiry (working)", () => {
     const state: PetState = {
       mood: "done",
-      previousMood: "working",
+      previousMood: "idle",
       temporary: true,
       expiresAt: Date.now() - 1,
+      activeStreams: 0,
+      activeTools: 1,
+      waitingPermission: false,
     };
-    const next = reducer(state, evt("AgentStarted"));
+    const next = reducer(state, evt("ToolRunning"));
     expect(next.mood).toBe("working");
     expect(next.previousMood).toBe("done");
   });
 
-  it("done reverts to previous mood, then processes incoming event", () => {
+  it("done reverts to derived mood, then processes incoming event", () => {
     const state: PetState = {
       mood: "done",
       previousMood: "idle",
       temporary: true,
       expiresAt: Date.now() - 1000,
+      activeStreams: 0,
+      activeTools: 0,
+      waitingPermission: false,
     };
-    const next = reducer(state, evt("AgentStarted"));
-    expect(next.mood).toBe("working");
+    const next = reducer(state, evt("StreamStarted"));
+    expect(next.mood).toBe("thinking");
     expect(next.previousMood).toBe("idle");
   });
 
-  it("error reverts to previous mood after expiry", () => {
+  it("error reverts to derived mood after expiry (thinking)", () => {
     const state: PetState = {
       mood: "error",
       previousMood: "idle",
       temporary: true,
       expiresAt: Date.now() - 1,
+      activeStreams: 1,
+      activeTools: 0,
+      waitingPermission: false,
     };
     const next = reducer(state, evt("StreamStarted"));
     expect(next.mood).toBe("thinking");
-    expect(next.previousMood).toBe("idle");
+    expect(next.previousMood).toBe("error");
   });
 
   it("does not revert if not yet expired", () => {
@@ -255,29 +347,23 @@ describe("temporary state expiry", () => {
       previousMood: "working",
       temporary: true,
       expiresAt: Date.now() + 60_000,
+      activeStreams: 0,
+      activeTools: 0,
+      waitingPermission: false,
     };
-    const next = reducer(state, evt("AgentStarted"));
+    const next = reducer(state, evt("StreamStarted"));
     expect(next.mood).toBe("done");
   });
 
-  it("error cannot override done that has not expired yet", () => {
+  it("error overrides done that has not expired yet", () => {
     const state: PetState = {
       mood: "done",
       previousMood: "working",
       temporary: true,
       expiresAt: Date.now() + 60_000,
-    };
-    const next = reducer(state, evt("TaskErrored"));
-    expect(next.mood).toBe("error");
-    expect(next.temporary).toBe(true);
-  });
-
-  it("error overrides done (equal priority, but newer event wins)", () => {
-    const state: PetState = {
-      mood: "done",
-      previousMood: "working",
-      temporary: true,
-      expiresAt: Date.now() + 60_000,
+      activeStreams: 0,
+      activeTools: 0,
+      waitingPermission: false,
     };
     const next = reducer(state, evt("TaskErrored"));
     expect(next.mood).toBe("error");
@@ -286,9 +372,9 @@ describe("temporary state expiry", () => {
 });
 
 describe("temporary state creation", () => {
-  it("TaskCompleted creates temporary done state", () => {
+  it("SessionCompleted creates temporary done state", () => {
     const state = makeState("idle");
-    const next = reducer(state, evt("TaskCompleted"));
+    const next = reducer(state, evt("SessionCompleted"));
     expect(next.mood).toBe("done");
     expect(next.temporary).toBe(true);
     expect(next.expiresAt).toBeGreaterThan(Date.now());
@@ -305,7 +391,7 @@ describe("temporary state creation", () => {
   it("done duration is approximately 3 seconds", () => {
     const state = makeState("idle");
     const now = Date.now();
-    const next = reducer(state, evt("TaskCompleted"));
+    const next = reducer(state, evt("SessionCompleted"));
     expect(next.expiresAt! - now).toBeGreaterThanOrEqual(2900);
     expect(next.expiresAt! - now).toBeLessThanOrEqual(3100);
   });
@@ -320,27 +406,51 @@ describe("temporary state creation", () => {
 
   it("previousMood is preserved when creating temporary state", () => {
     const state = makeState("thinking", { previousMood: "idle" });
-    const next = reducer(state, evt("TaskCompleted"));
+    const next = reducer(state, evt("SessionCompleted"));
     expect(next.mood).toBe("done");
     expect(next.previousMood).toBe("thinking");
+  });
+
+  it("SessionCompleted does not override error", () => {
+    const state: PetState = {
+      mood: "error",
+      previousMood: "working",
+      temporary: true,
+      expiresAt: Date.now() + 60_000,
+      activeStreams: 0,
+      activeTools: 0,
+      waitingPermission: false,
+    };
+    const next = reducer(state, evt("SessionCompleted"));
+    expect(next.mood).toBe("error");
+    expect(next.temporary).toBe(true);
   });
 });
 
 describe("no-op transitions", () => {
   it("same mood transition (ToolRunning when already working)", () => {
-    const state = makeState("working", { previousMood: "idle" });
+    const state = makeState("working", {
+      previousMood: "idle",
+      activeTools: 1,
+    });
     const next = reducer(state, evt("ToolRunning"));
     expect(next.mood).toBe("working");
   });
 
-  it("same mood transition (AgentStarted when already working)", () => {
-    const state = makeState("working", { previousMood: "idle" });
-    const next = reducer(state, evt("AgentStarted"));
-    expect(next.mood).toBe("working");
+  it("same mood transition (StreamStarted when already thinking)", () => {
+    const state = makeState("thinking", {
+      previousMood: "idle",
+      activeStreams: 1,
+    });
+    const next = reducer(state, evt("StreamStarted"));
+    expect(next.mood).toBe("thinking");
   });
 
-  it("lower priority event is ignored (thinking from working)", () => {
-    const state = makeState("working", { previousMood: "idle" });
+  it("StreamStarted does not change mood when tools are active", () => {
+    const state = makeState("working", {
+      previousMood: "idle",
+      activeTools: 1,
+    });
     const next = reducer(state, evt("StreamStarted"));
     expect(next.mood).toBe("working");
   });
@@ -381,5 +491,11 @@ describe("INITIAL_STATE", () => {
   it("starts as idle with previousMood idle", () => {
     expect(INITIAL_STATE.mood).toBe("idle");
     expect(INITIAL_STATE.previousMood).toBe("idle");
+  });
+
+  it("has zero counters", () => {
+    expect(INITIAL_STATE.activeStreams).toBe(0);
+    expect(INITIAL_STATE.activeTools).toBe(0);
+    expect(INITIAL_STATE.waitingPermission).toBe(false);
   });
 });

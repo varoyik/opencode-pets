@@ -1,4 +1,4 @@
-/** The six pet moods, ordered by priority (lowest to highest). */
+/** The six pet moods. */
 export const ALL_MOODS = [
   "idle",
   "thinking",
@@ -17,14 +17,20 @@ export interface PetState {
   temporary?: boolean;
   /** Unix-ms timestamp when a temporary mood expires. */
   expiresAt?: number;
+  /** Number of active text/reasoning streams. */
+  activeStreams: number;
+  /** Number of currently executing tools. */
+  activeTools: number;
+  /** True when a permission prompt is pending. */
+  waitingPermission: boolean;
 }
 
 export type PetEvent =
-  | { type: "AgentStarted" }
   | { type: "ToolRunning" }
+  | { type: "ToolCompleted" }
   | { type: "StreamStarted" }
   | { type: "StreamEnded" }
-  | { type: "TaskCompleted" }
+  | { type: "SessionCompleted" }
   | { type: "TaskErrored" }
   | { type: "PermissionPrompted" }
   | { type: "PermissionResolved" }
