@@ -170,6 +170,71 @@ This approach:
 
 ---
 
+## Bug H: `hasError` flag persists across sessions, skips one done celebration
+
+**File:** `packages/plugin/src/state-deriver.ts` — `hasError` flag (line 41) and `session.idle` handler (lines 115-129)
+
+**Problem:** When a `session.error` event fires, the `hasError` flag is set to `true`. It is only reset to `false` when the subsequent `session.idle` handler's error-guard branch runs. If a new, healthy session begins and ends before that guard fires, the first `session.idle` of the new session skips the done celebration because `hasError` is still `true` from the previous error.
+
+**Trace:**
+
+1. `session.error` fires → `hasError = true` → `TaskErrored` creates error mood (5s temporary)
+2. Error expires after 5s → mood reverts to idle via `deriveMood(state)`
+3. `hasError` is still `true` — the error guard only clears it when `session.idle` fires next
+4. User starts a new session → agent works → session ends → `session.idle` fires
+5. Error guard: `this.hasError` is `true` → skips `SessionCompleted` entirely → `hasError = false`
+6. Pet never shows "done" for this session — it goes straight from working/thinking to idle
+7. Next `session.idle` (another session) works normally — `hasError` is now `false`
+
+**Impact:** One "done" celebration is silently skipped after every session error. Since the error itself is the notable event (the pet showed `error` mood for 5s), the missing `done` is unlikely to be noticed by the user. The flag self-heals on the next `session.idle`.
+
+**Fix:** Reset `hasError` alongside the temporary state expiry. When the error timer fires and the temporary state reverts, `hasError` should be cleared at the same time. This can be done in the `manageExpiryTimer()` callback or by hooking into the mood transition from `error` to any non-error mood in `handleEvent()`:
+
+```
+// In handleEvent(), after state transition:
+if (this.hasError && newState.mood !== "error" && !newState.temporary) {
+  this.hasError = false;
+}
+```
+
+---
+
+## Bug I: Missing `part` undefined guard in `message.part.updated` handler
+
+**File:** `packages/plugin/src/state-deriver.ts` — `handleSseEvent()` `message.part.updated` case (lines 69-84)
+
+**Problem:** The `PartUpdatedProps` interface types `part` as required:
+
+```typescript
+interface PartUpdatedProps {
+  part: { id: string; type: string };
+}
+```
+
+But this is a compile-time type assertion (`event.properties as PartUpdatedProps`) — it provides no runtime guarantee. If an SSE event arrives without a `part` property for any reason (malformed event, SDK version mismatch, edge case in OpenCode's event emission), `part` would be `undefined` at runtime, and the subsequent `STREAM_PART_TYPES.has(part.type)` access would throw a `TypeError: Cannot read properties of undefined`.
+
+The old code had a defensive `if (part === undefined) return;` guard before accessing `part.type`. It was removed during the refactor that switched from `delta`-based tracking to `activeStreamParts`-based tracking.
+
+**Trace:**
+
+1. OpenCode emits `message.part.updated` with missing or malformed `part` property
+2. Destructuring: `const { part } = event.properties as PartUpdatedProps` → `part` is `undefined`
+3. `STREAM_PART_TYPES.has(part.type)` → `TypeError: Cannot read properties of undefined (reading 'type')`
+4. The uncaught error propagates up from `handleSseEvent()` → the plugin's `event` hook rejects → OpenCode may log an error or show it to the user
+5. No `StreamStarted` is sent for this part — if it was the first part of a stream, `activeStreams` stays at 0 and the pet never shows "thinking"
+
+**Impact:** Low probability — `message.part.updated` events in OpenCode reliably include a `part` property. However, if triggered, it causes an unhandled exception that breaks the entire SSE event handler for that event, potentially missing mood transitions.
+
+**Fix:** Add a runtime guard before accessing `part.type`:
+
+```
+const { part } = event.properties as PartUpdatedProps;
+if (!part) return;
+if (!STREAM_PART_TYPES.has(part.type)) return;
+```
+
+---
+
 ## Architectural Note: `~/.opencode-pets/overlay/` deployment model
 
 All deployment-related bugs (C, D, E, F) are now fixed. The loose-files approach
