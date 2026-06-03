@@ -14,8 +14,11 @@ interface SdkEvent {
 }
 
 interface PartUpdatedProps {
-  part?: { id: string; type: string };
-  delta?: string;
+  part: { id: string; type: string };
+}
+
+interface PartRemovedProps {
+  partID: string;
 }
 
 /**
@@ -26,11 +29,16 @@ interface IpcClientLike {
   sendMood(mood: PetMood): void;
 }
 
+/** Part types that indicate the agent is actively generating a response. */
+const STREAM_PART_TYPES = new Set(["text", "reasoning", "step-start"]);
+
 export class StateDeriver {
   private state: PetState;
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
+  private expiryTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly ipcClient: IpcClientLike;
   private activeStreamParts = new Set<string>();
+  private hasError = false;
 
   constructor(ipcClient: IpcClientLike) {
     this.ipcClient = ipcClient;
@@ -51,52 +59,96 @@ export class StateDeriver {
     if (event.type !== "IdleTimeout") {
       this.resetIdleTimer();
     }
+
+    // Schedule or clear temporary-state expiry timer
+    this.manageExpiryTimer();
   }
 
   handleSseEvent(event: SdkEvent): void {
     switch (event.type) {
       case "message.part.updated": {
-        const { part, delta } = event.properties as PartUpdatedProps;
+        const { part } = event.properties as PartUpdatedProps;
 
-        if (
-          part === undefined ||
-          (part.type !== "text" && part.type !== "reasoning")
-        ) {
+        if (!STREAM_PART_TYPES.has(part.type)) {
           return;
         }
 
-        if (delta !== undefined) {
+        // Fire StreamStarted on the FIRST message.part.updated for this part ID.
+        // We do NOT use delta to decide — in some OpenCode setups delta is always
+        // undefined, which caused StreamStarted and StreamEnded to fire in the
+        // same tick, cancelling each other out.
+        if (!this.activeStreamParts.has(part.id)) {
           this.activeStreamParts.add(part.id);
           this.handleEvent({ type: "StreamStarted" });
-        } else {
-          this.activeStreamParts.delete(part.id);
+        }
+        break;
+      }
+
+      case "message.part.removed": {
+        const { partID } = event.properties as PartRemovedProps;
+        if (this.activeStreamParts.has(partID)) {
+          this.activeStreamParts.delete(partID);
           if (this.activeStreamParts.size === 0) {
             this.handleEvent({ type: "StreamEnded" });
           }
         }
         break;
       }
-      case "permission.updated":
+
+      case "permission.asked":
         this.handleEvent({ type: "PermissionPrompted" });
         break;
+
       case "permission.replied":
         this.handleEvent({ type: "PermissionResolved" });
         break;
+
       case "session.error":
+        console.log(
+          "[state-deriver] session.error received — triggering error mood",
+        );
+        this.hasError = true;
+        this.resetSessionState();
         this.handleEvent({ type: "TaskErrored" });
         break;
-      case "session.idle":
-        this.handleEvent({ type: "IdleTimeout" });
+
+      case "session.idle": {
+        // Belt-and-suspenders: skip done if we know an error happened this
+        // session, OR if the current mood is already error.
+        if (this.hasError || this.state.mood === "error") {
+          console.log(
+            "[state-deriver] session.idle after error — skipping done",
+          );
+          this.hasError = false;
+          this.resetSessionState();
+          break;
+        }
+        this.resetSessionState();
+        this.handleEvent({ type: "SessionCompleted" });
         break;
+      }
     }
   }
 
+  getCurrentMood(): PetMood {
+    return this.state.mood;
+  }
+
   dispose(): void {
-    this.activeStreamParts.clear();
+    this.resetSessionState();
+    this.hasError = false;
     if (this.idleTimer !== null) {
       clearTimeout(this.idleTimer);
       this.idleTimer = null;
     }
+    if (this.expiryTimer !== null) {
+      clearTimeout(this.expiryTimer);
+      this.expiryTimer = null;
+    }
+  }
+
+  private resetSessionState(): void {
+    this.activeStreamParts.clear();
   }
 
   private resetIdleTimer(): void {
@@ -107,5 +159,27 @@ export class StateDeriver {
       this.idleTimer = null;
       this.handleEvent({ type: "IdleTimeout" });
     }, IDLE_TIMEOUT_MS);
+  }
+
+  /**
+   * Schedule a timer to fire when the current temporary state expires.
+   * If no temporary state is active, clear any pending expiry timer.
+   */
+  private manageExpiryTimer(): void {
+    if (this.expiryTimer !== null) {
+      clearTimeout(this.expiryTimer);
+      this.expiryTimer = null;
+    }
+
+    if (this.state.temporary && this.state.expiresAt) {
+      const delay = Math.max(0, this.state.expiresAt - Date.now());
+      this.expiryTimer = setTimeout(() => {
+        this.expiryTimer = null;
+        // Force expiry check by calling reducer with IdleTimeout.
+        // The reducer's expiry check at the top will revert the temporary
+        // state before IdleTimeout's own logic runs.
+        this.handleEvent({ type: "IdleTimeout" });
+      }, delay);
+    }
   }
 }

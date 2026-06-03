@@ -49,7 +49,7 @@ const petPlugin: Plugin = async (input) => {
     },
 
     "tool.execute.after": async () => {
-      stateDeriver.handleEvent({ type: "TaskCompleted" });
+      stateDeriver.handleEvent({ type: "ToolCompleted" });
     },
 
     "command.execute.before": async (cmdInput, _output) => {
@@ -59,6 +59,8 @@ const petPlugin: Plugin = async (input) => {
       if (overlayProcess === null || overlayProcess.exitCode !== null) {
         // Spawn on first use or after crash. Window auto-shows.
         overlayProcess = spawnOverlay();
+        // Send current mood immediately to avoid stale queue replay
+        ipcClient.sendCurrentMood(stateDeriver.getCurrentMood());
         message = "Pet overlay launched.";
       } else {
         // Already running → toggle visibility

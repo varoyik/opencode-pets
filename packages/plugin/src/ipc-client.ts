@@ -5,6 +5,8 @@ const MAX_RETRIES = 10;
 const INITIAL_BACKOFF_MS = 100;
 const MAX_BACKOFF_MS = 2000;
 
+const SET_MOOD_PREFIX = '{"type":"set_mood"';
+
 type ClientState =
   | "idle"
   | "connecting"
@@ -60,6 +62,38 @@ export class IpcClient {
     this.send(msg);
   }
 
+  /**
+   * Send the current mood immediately if connected, or queue it if not.
+   * Unlike sendMood(), this does not append to the queue if already connected —
+   * it writes directly to the socket. Used after overlay spawn to ensure
+   * only the current mood is reflected, not stale history.
+   */
+  sendCurrentMood(mood: PetMood): void {
+    if (this.state === "closed") return;
+
+    const msg =
+      JSON.stringify({
+        type: "set_mood",
+        payload: { mood },
+      }) + "\n";
+
+    if (this.state === "connected" && this.socket) {
+      this.socket.write(msg);
+    } else {
+      // Not connected — queue it, but first clear any stale set_mood messages
+      this.clearStaleMoodMessages();
+      if (this.queue.length >= MAX_QUEUE_SIZE) {
+        this.queue.shift();
+      }
+      this.queue.push(msg);
+
+      if (this.state === "idle") {
+        this.retryCount = 0;
+        this.connect();
+      }
+    }
+  }
+
   close(): void {
     this.state = "closed";
     this.queue = [];
@@ -106,6 +140,8 @@ export class IpcClient {
           this.socket = socket;
           this.state = "connected";
           this.retryCount = 0;
+          // Clear stale mood history before flushing
+          this.clearStaleMoodMessages();
           this.flushQueue();
         },
         data: () => {
@@ -144,6 +180,7 @@ export class IpcClient {
         if (this.state === "connecting") {
           this.state = "connected";
           this.retryCount = 0;
+          this.clearStaleMoodMessages();
           this.flushQueue();
         }
       })
@@ -195,5 +232,28 @@ export class IpcClient {
       }
       this.queue.shift();
     }
+  }
+
+  /**
+   * Remove all queued set_mood messages except the latest one.
+   * Prevents stale mood replay when the overlay reconnects.
+   */
+  private clearStaleMoodMessages(): void {
+    let lastMoodIndex = -1;
+    for (let i = this.queue.length - 1; i >= 0; i--) {
+      if (this.queue[i]!.startsWith(SET_MOOD_PREFIX)) {
+        lastMoodIndex = i;
+        break;
+      }
+    }
+
+    if (lastMoodIndex === -1) {
+      return;
+    }
+
+    // Keep only non-set_mood messages and the last set_mood message
+    this.queue = this.queue.filter(
+      (msg, idx) => !msg.startsWith(SET_MOOD_PREFIX) || idx === lastMoodIndex,
+    );
   }
 }
