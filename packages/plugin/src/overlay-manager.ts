@@ -14,7 +14,7 @@ export function spawnOverlay(): Subprocess {
     ".bin",
     "electron",
   );
-  return Bun.spawn([electronBin, "."], { cwd: overlayPath });
+  return Bun.spawn([electronBin, "."], { cwd: overlayPath, stderr: "ignore" });
 }
 
 export async function healthCheck(socketPath: string): Promise<boolean> {

@@ -104,9 +104,6 @@ export class StateDeriver {
         break;
 
       case "session.error":
-        console.log(
-          "[state-deriver] session.error received — triggering error mood",
-        );
         this.hasError = true;
         this.resetSessionState();
         this.handleEvent({ type: "TaskErrored" });
@@ -117,9 +114,6 @@ export class StateDeriver {
         // Belt-and-suspenders: skip done if we know an error happened this
         // session, OR if the current mood is already error.
         if (this.hasError || this.state.mood === "error") {
-          console.log(
-            "[state-deriver] session.idle after error — skipping done",
-          );
           this.hasError = false;
           break;
         }

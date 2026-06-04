@@ -25,6 +25,7 @@ export class IpcClient {
   private queue: string[] = [];
   private retryCount = 0;
   private backoffTimer: ReturnType<typeof setTimeout> | null = null;
+  private hasConnected = false;
   private readonly socketPath: string;
 
   constructor(socketPath?: string) {
@@ -140,6 +141,7 @@ export class IpcClient {
           this.socket = socket;
           this.state = "connected";
           this.retryCount = 0;
+          this.hasConnected = true;
           // Clear stale mood history before flushing
           this.clearStaleMoodMessages();
           this.flushQueue();
@@ -165,7 +167,9 @@ export class IpcClient {
           console.error("[ipc-client] socket error:", error.message);
         },
         connectError: (_socket, error) => {
-          console.error("[ipc-client] connection failed:", error.message);
+          if (this.hasConnected) {
+            console.error("[ipc-client] connection failed:", error.message);
+          }
         },
         end: (_socket) => {
           this.socket = null;
