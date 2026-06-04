@@ -113,6 +113,7 @@ export class StateDeriver {
         break;
 
       case "session.idle": {
+        this.resetSessionState();
         // Belt-and-suspenders: skip done if we know an error happened this
         // session, OR if the current mood is already error.
         if (this.hasError || this.state.mood === "error") {
@@ -120,10 +121,8 @@ export class StateDeriver {
             "[state-deriver] session.idle after error — skipping done",
           );
           this.hasError = false;
-          this.resetSessionState();
           break;
         }
-        this.resetSessionState();
         this.handleEvent({ type: "SessionCompleted" });
         break;
       }

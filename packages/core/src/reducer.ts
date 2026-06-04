@@ -138,11 +138,8 @@ export function reducer(state: PetState, event: PetEvent): PetState {
   // For all other events, set mood to derived mood
   // (temporary states are still active if they haven't expired — handled above)
   if (state.temporary) {
-    // While temporary is active, keep the temporary mood but update counters
-    // The expiry check at the top will revert when time is up
-    if (nextState.mood !== state.mood) {
-      nextState.previousMood = state.mood;
-    }
+    // While temporary is active, keep the temporary mood but update counters.
+    // The expiry check at the top will revert when time is up.
     return nextState;
   }
 

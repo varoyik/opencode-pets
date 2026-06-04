@@ -31,13 +31,17 @@ export class IpcClient {
     this.socketPath = socketPath ?? getDefaultSocketPath();
   }
 
-  sendMood(mood: PetMood): void {
-    const msg =
+  private buildMoodMessage(mood: PetMood): string {
+    return (
       JSON.stringify({
         type: "set_mood",
         payload: { mood },
-      }) + "\n";
-    this.send(msg);
+      }) + "\n"
+    );
+  }
+
+  sendMood(mood: PetMood): void {
+    this.send(this.buildMoodMessage(mood));
   }
 
   sendBubble(text: string, duration?: number): void {
@@ -71,11 +75,7 @@ export class IpcClient {
   sendCurrentMood(mood: PetMood): void {
     if (this.state === "closed") return;
 
-    const msg =
-      JSON.stringify({
-        type: "set_mood",
-        payload: { mood },
-      }) + "\n";
+    const msg = this.buildMoodMessage(mood);
 
     if (this.state === "connected" && this.socket) {
       this.socket.write(msg);
