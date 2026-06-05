@@ -5,69 +5,24 @@ but may cause problems later. Fix them before they become surface-area bugs.
 
 ---
 
-## Bug A: `stop()` hangs if a client is connected
+## Bug A: `stop()` hangs if a client is connected ✅ FIXED
 
-**File:** `packages/overlay/src/main/ipc-server.ts` — `stop()` function (line 134)
+**File:** `packages/overlay/src/main/ipc-server.ts` — `stop()` function.
 
-**Problem:** `server.close()` only stops accepting _new_ connections. If a
-plugin has an active socket connection when the overlay shuts down, the close
-callback never fires, `resolve()` is never called, and `app.quit()` never runs.
-The app hangs on shutdown.
-
-**Trace:**
-
-1. Plugin connects to the Unix socket
-2. Electron starts shutting down → `before-quit` → `server.stop()`
-3. `server.close()` waits for all connections to end
-4. The plugin's socket stays open → callback never fires
-5. `stop()` Promise never resolves → `app.quit()` dead lettered
-
-**Fix:** Track active client sockets in a `Set<net.Socket>`, destroy them in
-`stop()` before calling `server.close()`:
-
-```
-const sockets = new Set<net.Socket>();
-server = net.createServer((socket) => {
-  sockets.add(socket);
-  socket.on("close", () => sockets.delete(socket));
-  // ...
-});
-// In stop():
-for (const socket of sockets) socket.destroy();
-server.close(() => { ... });
-```
+**Fix applied:** Tracked active sockets in a `Set<net.Socket>`, destroying them in
+`stop()` before calling `server.close()`. This ensures the close callback
+fires immediately and the `stop()` promise resolves, even when the plugin's
+socket is still open.
 
 ---
 
-## Bug B: `chmodSync` throwing prevents `start()` from resolving
+## Bug B: `chmodSync` throwing prevents `start()` from resolving ✅ FIXED
 
-**File:** `packages/overlay/src/main/ipc-server.ts` — `start()` function (line 115-119)
+**File:** `packages/overlay/src/main/ipc-server.ts` — `start()` function.
 
-**Problem:** If `fs.chmodSync(socketPath, 0o600)` throws (permissions,
-filesystem, or path issue), `resolve()` is never called, and the `start()`
-promise never settles. `await server.start()` hangs forever, blocking app
-startup.
-
-**Trace:**
-
-1. `server.listen(socketPath, callback)` fires callback on success
-2. `fs.chmodSync(socketPath, 0o600)` throws
-3. `resolve()` is skipped — promise never settles
-4. `index.ts` line 24: `await server.start()` hangs
-
-**Fix:** Wrap chmod in try/catch, reject on failure:
-
-```
-server.listen(socketPath, () => {
-  try {
-    fs.chmodSync(socketPath, 0o600);
-  } catch (err) {
-    reject(err);
-    return;
-  }
-  resolve();
-});
-```
+**Fix applied:** Wrapped `fs.chmodSync()` in a try/catch inside the listen
+callback. On failure, the `start()` promise is properly rejected instead of
+hanging forever.
 
 ---
 
@@ -170,68 +125,19 @@ This approach:
 
 ---
 
-## Bug H: `hasError` flag persists across sessions, skips one done celebration
+## Bug H: `hasError` flag persists across sessions, skips one done celebration ✅ FIXED
 
-**File:** `packages/plugin/src/state-deriver.ts` — `hasError` flag (line 41) and `session.idle` handler (lines 115-129)
+**File:** `packages/plugin/src/state-deriver.ts` — `hasError` flag and `session.idle` handler.
 
-**Problem:** When a `session.error` event fires, the `hasError` flag is set to `true`. It is only reset to `false` when the subsequent `session.idle` handler's error-guard branch runs. If a new, healthy session begins and ends before that guard fires, the first `session.idle` of the new session skips the done celebration because `hasError` is still `true` from the previous error.
-
-**Trace:**
-
-1. `session.error` fires → `hasError = true` → `TaskErrored` creates error mood (5s temporary)
-2. Error expires after 5s → mood reverts to idle via `deriveMood(state)`
-3. `hasError` is still `true` — the error guard only clears it when `session.idle` fires next
-4. User starts a new session → agent works → session ends → `session.idle` fires
-5. Error guard: `this.hasError` is `true` → skips `SessionCompleted` entirely → `hasError = false`
-6. Pet never shows "done" for this session — it goes straight from working/thinking to idle
-7. Next `session.idle` (another session) works normally — `hasError` is now `false`
-
-**Impact:** One "done" celebration is silently skipped after every session error. Since the error itself is the notable event (the pet showed `error` mood for 5s), the missing `done` is unlikely to be noticed by the user. The flag self-heals on the next `session.idle`.
-
-**Fix:** Reset `hasError` alongside the temporary state expiry. When the error timer fires and the temporary state reverts, `hasError` should be cleared at the same time. This can be done in the `manageExpiryTimer()` callback or by hooking into the mood transition from `error` to any non-error mood in `handleEvent()`:
-
-```
-// In handleEvent(), after state transition:
-if (this.hasError && newState.mood !== "error" && !newState.temporary) {
-  this.hasError = false;
-}
-```
+**Fix applied:** Added an auto-clear guard in `handleEvent()` after each state transition. When `hasError` is `true` but the new state is no longer in error mood and is not temporary (i.e., the error timer expired), the flag is cleared immediately. This prevents `hasError` from leaking into the next healthy session and silently skipping its done celebration.
 
 ---
 
-## Bug I: Missing `part` undefined guard in `message.part.updated` handler
+## Bug I: Missing `part` undefined guard in `message.part.updated` handler ✅ FIXED
 
-**File:** `packages/plugin/src/state-deriver.ts` — `handleSseEvent()` `message.part.updated` case (lines 69-84)
+**File:** `packages/plugin/src/state-deriver.ts` — `handleSseEvent()` `message.part.updated` case.
 
-**Problem:** The `PartUpdatedProps` interface types `part` as required:
-
-```typescript
-interface PartUpdatedProps {
-  part: { id: string; type: string };
-}
-```
-
-But this is a compile-time type assertion (`event.properties as PartUpdatedProps`) — it provides no runtime guarantee. If an SSE event arrives without a `part` property for any reason (malformed event, SDK version mismatch, edge case in OpenCode's event emission), `part` would be `undefined` at runtime, and the subsequent `STREAM_PART_TYPES.has(part.type)` access would throw a `TypeError: Cannot read properties of undefined`.
-
-The old code had a defensive `if (part === undefined) return;` guard before accessing `part.type`. It was removed during the refactor that switched from `delta`-based tracking to `activeStreamParts`-based tracking.
-
-**Trace:**
-
-1. OpenCode emits `message.part.updated` with missing or malformed `part` property
-2. Destructuring: `const { part } = event.properties as PartUpdatedProps` → `part` is `undefined`
-3. `STREAM_PART_TYPES.has(part.type)` → `TypeError: Cannot read properties of undefined (reading 'type')`
-4. The uncaught error propagates up from `handleSseEvent()` → the plugin's `event` hook rejects → OpenCode may log an error or show it to the user
-5. No `StreamStarted` is sent for this part — if it was the first part of a stream, `activeStreams` stays at 0 and the pet never shows "thinking"
-
-**Impact:** Low probability — `message.part.updated` events in OpenCode reliably include a `part` property. However, if triggered, it causes an unhandled exception that breaks the entire SSE event handler for that event, potentially missing mood transitions.
-
-**Fix:** Add a runtime guard before accessing `part.type`:
-
-```
-const { part } = event.properties as PartUpdatedProps;
-if (!part) return;
-if (!STREAM_PART_TYPES.has(part.type)) return;
-```
+**Fix applied:** Added a runtime `if (!part) return;` guard before accessing `part.type`. The compile-time type cast provides no runtime guarantee, and a malformed SSE event without a `part` property would have thrown a `TypeError`. The guard matches the pattern of the original defensive code that was removed during the refactor.
 
 ---
 
