@@ -20,6 +20,7 @@ export function createSocketServer(
   browserWindow: BrowserWindow,
 ): SocketServer {
   let server: net.Server | null = null;
+  const sockets = new Set<net.Socket>();
 
   function start(): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -36,6 +37,9 @@ export function createSocketServer(
       }
 
       server = net.createServer((socket) => {
+        sockets.add(socket);
+        socket.on("close", () => sockets.delete(socket));
+
         let buffer = "";
 
         socket.setEncoding("utf-8");
@@ -108,7 +112,12 @@ export function createSocketServer(
       });
 
       server.listen(socketPath, () => {
-        fs.chmodSync(socketPath, 0o600);
+        try {
+          fs.chmodSync(socketPath, 0o600);
+        } catch (err) {
+          reject(err);
+          return;
+        }
         resolve();
       });
     });
@@ -124,6 +133,9 @@ export function createSocketServer(
       // Prevent rejections from error events during close
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (server as any).removeAllListeners("error");
+
+      for (const socket of sockets) socket.destroy();
+      sockets.clear();
 
       server.close(() => {
         try {

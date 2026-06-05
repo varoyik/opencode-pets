@@ -53,6 +53,12 @@ export class StateDeriver {
       this.ipcClient.sendMood(newState.mood);
     }
 
+    // When the temporary error state expires, clear the error flag so it
+    // doesn't leak into the next session and silently skip its done celebration.
+    if (this.hasError && newState.mood !== "error" && !newState.temporary) {
+      this.hasError = false;
+    }
+
     this.state = newState;
 
     // Only activity events reset the timer — not the timeout firing.
@@ -69,6 +75,9 @@ export class StateDeriver {
       case "message.part.updated": {
         const { part } = event.properties as PartUpdatedProps;
 
+        // Compile-time cast provides no runtime guarantee — guard against
+        // malformed events where `part` is missing.
+        if (!part) return;
         if (!STREAM_PART_TYPES.has(part.type)) {
           return;
         }
