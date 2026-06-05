@@ -51,4 +51,31 @@ document.addEventListener("DOMContentLoaded", () => {
   window.electronAPI.onBubble((text: string, duration: number) => {
     showBubble(text, duration);
   });
+
+  let isDragging = false;
+  let lastX = 0;
+  let lastY = 0;
+
+  petDiv.addEventListener("mousedown", (e) => {
+    isDragging = true;
+    lastX = e.screenX;
+    lastY = e.screenY;
+    petDiv.classList.add("dragging");
+  });
+
+  window.addEventListener("mousemove", (e) => {
+    if (!isDragging) return;
+    const dx = e.screenX - lastX;
+    const dy = e.screenY - lastY;
+    lastX = e.screenX;
+    lastY = e.screenY;
+    window.electronAPI.sendDragDelta(dx, dy);
+  });
+
+  window.addEventListener("mouseup", () => {
+    if (isDragging) {
+      isDragging = false;
+      petDiv.classList.remove("dragging");
+    }
+  });
 });

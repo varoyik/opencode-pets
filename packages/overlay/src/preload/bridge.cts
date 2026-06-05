@@ -21,4 +21,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
       (_event: any, text: string, duration: number) => callback(text, duration),
     );
   },
+  sendDragDelta: (dx: number, dy: number): void => {
+    ipcRenderer.send("drag-delta", dx, dy);
+  },
 });

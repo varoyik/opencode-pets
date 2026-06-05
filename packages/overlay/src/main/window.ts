@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from "electron";
+import { app, BrowserWindow, ipcMain } from "electron";
 import path from "node:path";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
@@ -50,14 +50,28 @@ export function createWindow(): BrowserWindow {
     }
   }
 
-  win.on("moved", () => {
-    const [x, y] = win.getPosition();
-    try {
-      mkdirSync(path.dirname(POSITION_FILE), { recursive: true });
-      writeFileSync(POSITION_FILE, JSON.stringify({ x, y }));
-    } catch {
-      // Best-effort: don't crash if we can't write the position file
+  let writeTimer: ReturnType<typeof setTimeout> | null = null;
+
+  ipcMain.on("drag-delta", (_event, dx: number, dy: number) => {
+    const pos = win.getPosition() as [number, number];
+    win.setPosition(pos[0] + dx, pos[1] + dy);
+
+    if (writeTimer !== null) {
+      clearTimeout(writeTimer);
     }
+    writeTimer = setTimeout(() => {
+      const newPos = win.getPosition() as [number, number];
+      try {
+        mkdirSync(path.dirname(POSITION_FILE), { recursive: true });
+        writeFileSync(
+          POSITION_FILE,
+          JSON.stringify({ x: newPos[0], y: newPos[1] }),
+        );
+      } catch {
+        // Best-effort: don't crash if we can't write the position file
+      }
+      writeTimer = null;
+    }, 300);
   });
 
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });

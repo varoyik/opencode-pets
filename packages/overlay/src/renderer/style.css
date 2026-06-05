@@ -10,7 +10,6 @@ body {
   height: 100%;
   overflow: hidden;
   background: transparent;
-  -webkit-app-region: drag;
 }
 
 #pet {
@@ -22,6 +21,11 @@ body {
   position: absolute;
   bottom: 0;
   left: 0;
+  cursor: grab;
+}
+
+#pet.dragging {
+  cursor: grabbing;
 }
 
 .state-idle {
