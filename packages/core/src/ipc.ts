@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ALL_MOODS } from "./states.js";
+import { PetManifestSchema } from "./pets.js";
 
 const setMoodPayload = z.object({
   mood: z.enum(ALL_MOODS),
@@ -11,6 +12,21 @@ const showBubblePayload = z.object({
 });
 
 const toggleVisibilityPayload = z.object({});
+
+const setConfigPayload = z.object({
+  defaultPet: z.string(),
+  idleTimeoutMs: z.number().positive(),
+  bubbleDurationMs: z.number().positive(),
+});
+
+const setPetsPayload = z.object({
+  pets: z.array(PetManifestSchema),
+});
+
+const switchPetPayload = z.object({
+  petId: z.string(),
+  spritesheetPath: z.string().optional(),
+});
 
 export const IpcMessageSchema = z.discriminatedUnion("type", [
   z.object({
@@ -25,6 +41,18 @@ export const IpcMessageSchema = z.discriminatedUnion("type", [
     type: z.literal("toggle_visibility"),
     payload: toggleVisibilityPayload,
   }),
+  z.object({
+    type: z.literal("set_config"),
+    payload: setConfigPayload,
+  }),
+  z.object({
+    type: z.literal("set_pets"),
+    payload: setPetsPayload,
+  }),
+  z.object({
+    type: z.literal("switch_pet"),
+    payload: switchPetPayload,
+  }),
 ]);
 
 export type IpcMessage = z.infer<typeof IpcMessageSchema>;
@@ -34,6 +62,9 @@ export type IpcShowBubblePayload = z.infer<typeof showBubblePayload>;
 export type IpcToggleVisibilityPayload = z.infer<
   typeof toggleVisibilityPayload
 >;
+export type IpcSetConfigPayload = z.infer<typeof setConfigPayload>;
+export type IpcSetPetsPayload = z.infer<typeof setPetsPayload>;
+export type IpcSwitchPetPayload = z.infer<typeof switchPetPayload>;
 
 /**
  * Safely parse and validate an IPC message from JSON.

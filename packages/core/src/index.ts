@@ -9,4 +9,13 @@ export type {
   IpcSetMoodPayload,
   IpcShowBubblePayload,
   IpcToggleVisibilityPayload,
+  IpcSetConfigPayload,
+  IpcSetPetsPayload,
+  IpcSwitchPetPayload,
 } from "./ipc.js";
+
+export { PetManifestSchema } from "./pets.js";
+export type { PetManifest } from "./pets.js";
+
+export { ConfigSchema, getConfigDir, DEFAULT_CONFIG } from "./config.js";
+export type { Config } from "./config.js";
