@@ -1,7 +1,7 @@
 import net from "node:net";
 import fs from "node:fs";
 import path from "node:path";
-import type { BrowserWindow } from "electron";
+import { ipcMain, type BrowserWindow } from "electron";
 import { parseIpcMessage } from "@opencode-pets/core";
 
 export interface SocketServer {
@@ -96,6 +96,30 @@ export function createSocketServer(
                   }
                 }
                 break;
+
+              case "set_config":
+                if (!browserWindow.isDestroyed()) {
+                  browserWindow.webContents.send("config-changed", msg.payload);
+                }
+                break;
+
+              case "set_pets":
+                if (!browserWindow.isDestroyed()) {
+                  browserWindow.webContents.send(
+                    "pets-changed",
+                    msg.payload.pets,
+                  );
+                }
+                break;
+
+              case "switch_pet":
+                if (!browserWindow.isDestroyed()) {
+                  browserWindow.webContents.send(
+                    "switch-pet",
+                    msg.payload.spritesheetPath,
+                  );
+                }
+                break;
             }
           }
         });
@@ -103,6 +127,22 @@ export function createSocketServer(
         socket.on("error", (err: Error) => {
           console.warn("[ipc-server] Socket error:", err.message);
         });
+      });
+
+      // Forward renderer pet switch requests to plugin via socket
+      ipcMain.on("request-switch-pet", (_event, petId: string) => {
+        const msg =
+          JSON.stringify({
+            type: "switch_pet",
+            payload: { petId },
+          }) + "\n";
+        for (const socket of sockets) {
+          try {
+            socket.write(msg);
+          } catch (err) {
+            console.warn("[ipc-server] Failed to forward switch_pet:", err);
+          }
+        }
       });
 
       // Bun types omit EventEmitter; Electron's runtime has it
@@ -133,6 +173,8 @@ export function createSocketServer(
       // Prevent rejections from error events during close
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (server as any).removeAllListeners("error");
+
+      ipcMain.removeAllListeners("request-switch-pet");
 
       for (const socket of sockets) socket.destroy();
       sockets.clear();

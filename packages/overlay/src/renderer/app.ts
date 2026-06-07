@@ -20,6 +20,9 @@ document.addEventListener("DOMContentLoaded", () => {
     petDiv.classList.add("state-idle");
   }
 
+  let bubbleDurationMs = 5000;
+  let pets: { id: string; displayName: string; spritesheetPath: string }[] = [];
+
   function setMood(mood: string): void {
     for (const m of ALL_MOODS) {
       petDiv!.classList.remove(`state-${m}`);
@@ -49,7 +52,21 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   window.electronAPI.onBubble((text: string, duration: number) => {
-    showBubble(text, duration);
+    showBubble(text, duration ?? bubbleDurationMs);
+  });
+
+  window.electronAPI.onConfigChanged((config) => {
+    bubbleDurationMs = config.bubbleDurationMs;
+  });
+
+  window.electronAPI.onPetsChanged((newPets) => {
+    pets = newPets;
+    // Stored in memory for future pet selector UI (Change 2: interaction-polish)
+    console.log("[renderer] Pets updated:", pets.length);
+  });
+
+  window.electronAPI.onSwitchPet((spritesheetPath: string) => {
+    petDiv!.style.backgroundImage = `url(file://${spritesheetPath})`;
   });
 
   let isDragging = false;
