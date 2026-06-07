@@ -1,4 +1,5 @@
-import type { PetMood } from "@opencode-pets/core";
+import type { PetMood, Config, PetManifest } from "@opencode-pets/core";
+import { parseIpcMessage } from "@opencode-pets/core";
 
 const MAX_QUEUE_SIZE = 10;
 const MAX_RETRIES = 10;
@@ -27,6 +28,11 @@ export class IpcClient {
   private backoffTimer: ReturnType<typeof setTimeout> | null = null;
   private hasConnected = false;
   private readonly socketPath: string;
+  private currentConfig: Config | null = null;
+  private currentPets: PetManifest[] | null = null;
+  private currentMood: PetMood | null = null;
+  private onSwitchPetCallback: ((petId: string) => void) | null = null;
+  private incomingBuffer = "";
 
   constructor(socketPath?: string) {
     this.socketPath = socketPath ?? getDefaultSocketPath();
@@ -42,6 +48,7 @@ export class IpcClient {
   }
 
   sendMood(mood: PetMood): void {
+    this.currentMood = mood;
     this.send(this.buildMoodMessage(mood));
   }
 
@@ -67,6 +74,39 @@ export class IpcClient {
     this.send(msg);
   }
 
+  sendConfig(config: Config): void {
+    this.currentConfig = config;
+    const msg =
+      JSON.stringify({
+        type: "set_config",
+        payload: config,
+      }) + "\n";
+    this.send(msg);
+  }
+
+  sendPets(pets: PetManifest[]): void {
+    this.currentPets = pets;
+    const msg =
+      JSON.stringify({
+        type: "set_pets",
+        payload: { pets },
+      }) + "\n";
+    this.send(msg);
+  }
+
+  sendSwitchPet(petId: string, resolvedPath: string): void {
+    const msg =
+      JSON.stringify({
+        type: "switch_pet",
+        payload: { petId, spritesheetPath: resolvedPath },
+      }) + "\n";
+    this.send(msg);
+  }
+
+  onSwitchPet(callback: (petId: string) => void): void {
+    this.onSwitchPetCallback = callback;
+  }
+
   /**
    * Send the current mood immediately if connected, or queue it if not.
    * Unlike sendMood(), this does not append to the queue if already connected —
@@ -76,6 +116,7 @@ export class IpcClient {
   sendCurrentMood(mood: PetMood): void {
     if (this.state === "closed") return;
 
+    this.currentMood = mood;
     const msg = this.buildMoodMessage(mood);
 
     if (this.state === "connected" && this.socket) {
@@ -98,6 +139,7 @@ export class IpcClient {
   close(): void {
     this.state = "closed";
     this.queue = [];
+    this.incomingBuffer = "";
 
     if (this.backoffTimer !== null) {
       clearTimeout(this.backoffTimer);
@@ -142,13 +184,14 @@ export class IpcClient {
           this.state = "connected";
           this.retryCount = 0;
           this.hasConnected = true;
+          // Send handshake: config → pets → mood
+          this.sendHandshake();
           // Clear stale mood history before flushing
           this.clearStaleMoodMessages();
           this.flushQueue();
         },
-        data: () => {
-          // No-op: IpcClient is write-only, but Bun requires at least
-          // data or drain callback for Unix socket connections.
+        data: (_socket, data: Buffer | string) => {
+          this.handleIncomingData(data);
         },
         close: (_socket, error) => {
           this.socket = null;
@@ -194,6 +237,57 @@ export class IpcClient {
           this.scheduleReconnect();
         }
       });
+  }
+
+  private sendHandshake(): void {
+    if (!this.socket) return;
+    if (this.currentConfig) {
+      this.socket.write(
+        JSON.stringify({ type: "set_config", payload: this.currentConfig }) +
+          "\n",
+      );
+    }
+    if (this.currentPets) {
+      this.socket.write(
+        JSON.stringify({
+          type: "set_pets",
+          payload: { pets: this.currentPets },
+        }) + "\n",
+      );
+    }
+    if (this.currentMood) {
+      this.socket.write(this.buildMoodMessage(this.currentMood));
+    }
+  }
+
+  private handleIncomingData(data: Buffer | string): void {
+    this.incomingBuffer +=
+      typeof data === "string" ? data : data.toString("utf-8");
+    const lines = this.incomingBuffer.split("\n");
+    this.incomingBuffer = lines.pop() ?? "";
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed === "") continue;
+
+      let raw: unknown;
+      try {
+        raw = JSON.parse(trimmed);
+      } catch {
+        console.warn("[ipc-client] Invalid JSON:", trimmed);
+        continue;
+      }
+
+      const msg = parseIpcMessage(raw);
+      if (!msg) {
+        console.warn("[ipc-client] Invalid IPC message:", trimmed);
+        continue;
+      }
+
+      if (msg.type === "switch_pet" && this.onSwitchPetCallback) {
+        this.onSwitchPetCallback(msg.payload.petId);
+      }
+    }
   }
 
   private scheduleReconnect(): void {

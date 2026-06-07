@@ -3,15 +3,50 @@ import type { Plugin } from "@opencode-ai/plugin";
 import { IpcClient } from "./ipc-client.js";
 import { spawnOverlay, killOverlay } from "./overlay-manager.js";
 import { StateDeriver } from "./state-deriver.js";
+import { readConfig, watchConfig } from "./config.js";
+import { scanPets } from "./pet-scanner.js";
+import type { Config } from "@opencode-pets/core";
 
 const petPlugin: Plugin = async (input) => {
   const uid = typeof process.getuid === "function" ? process.getuid() : 1000;
   const socketPath = `/tmp/opencode-pets-${uid}/opencode-pets.sock`;
   const client = input.client;
 
+  // Initialize config and pets
+  const config = readConfig();
+  const pets = scanPets();
+
   const ipcClient = new IpcClient(socketPath);
-  const stateDeriver = new StateDeriver(ipcClient);
+  const stateDeriver = new StateDeriver(ipcClient, config.idleTimeoutMs);
+
+  // Send initial config and pets to overlay (queued until connection)
+  ipcClient.sendConfig(config);
+  ipcClient.sendPets(pets);
+
+  function switchToDefaultPet(defaultPetId: string): void {
+    const pet = pets.find((p) => p.id === defaultPetId);
+    if (pet) {
+      ipcClient.sendSwitchPet(pet.id, pet.spritesheetPath);
+    } else {
+      console.warn(
+        `[plugin] Unknown defaultPet "${defaultPetId}" — not in scanned pet list, staying on current pet`,
+      );
+    }
+  }
+
+  switchToDefaultPet(config.defaultPet);
+
   let overlayProcess: Subprocess | null = null;
+  let unwatchConfig: (() => void) | null = null;
+
+  ipcClient.onSwitchPet((petId: string) => {
+    const pet = pets.find((p) => p.id === petId);
+    if (!pet) {
+      console.warn(`[plugin] Unknown pet ID requested: ${petId}`);
+      return;
+    }
+    ipcClient.sendSwitchPet(pet.id, pet.spritesheetPath);
+  });
 
   return {
     config: async (config) => {
@@ -38,6 +73,10 @@ const petPlugin: Plugin = async (input) => {
           killOverlay(overlayProcess);
         }
         ipcClient.close();
+        if (unwatchConfig) {
+          unwatchConfig();
+          unwatchConfig = null;
+        }
         return;
       }
 
@@ -61,7 +100,20 @@ const petPlugin: Plugin = async (input) => {
         overlayProcess = spawnOverlay();
         // Send current mood immediately to avoid stale queue replay
         ipcClient.sendCurrentMood(stateDeriver.getCurrentMood());
+        // Show the configured default pet
+        switchToDefaultPet(config.defaultPet);
         message = "Pet overlay launched.";
+
+        // Start config watcher after first spawn
+        if (!unwatchConfig) {
+          unwatchConfig = watchConfig((newConfig: Config) => {
+            ipcClient.sendConfig(newConfig);
+            // Auto-switch if defaultPet changed
+            if (newConfig.defaultPet !== config.defaultPet) {
+              switchToDefaultPet(newConfig.defaultPet);
+            }
+          });
+        }
       } else {
         // Already running → toggle visibility
         ipcClient.toggleVisibility();

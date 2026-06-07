@@ -1,8 +1,6 @@
 import { reducer, INITIAL_STATE } from "@opencode-pets/core";
 import type { PetMood, PetState, PetEvent } from "@opencode-pets/core";
 
-const IDLE_TIMEOUT_MS = 30_000;
-
 /**
  * Structural subset of the SDK's v1 Event type — only the fields we need.
  * Uses `properties: unknown` because each event member has a different
@@ -37,11 +35,13 @@ export class StateDeriver {
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
   private expiryTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly ipcClient: IpcClientLike;
+  private readonly idleTimeoutMs: number;
   private activeStreamParts = new Set<string>();
   private hasError = false;
 
-  constructor(ipcClient: IpcClientLike) {
+  constructor(ipcClient: IpcClientLike, idleTimeoutMs = 30_000) {
     this.ipcClient = ipcClient;
+    this.idleTimeoutMs = idleTimeoutMs;
     this.state = { ...INITIAL_STATE };
     this.resetIdleTimer();
   }
@@ -160,7 +160,7 @@ export class StateDeriver {
     this.idleTimer = setTimeout(() => {
       this.idleTimer = null;
       this.handleEvent({ type: "IdleTimeout" });
-    }, IDLE_TIMEOUT_MS);
+    }, this.idleTimeoutMs);
   }
 
   /**
