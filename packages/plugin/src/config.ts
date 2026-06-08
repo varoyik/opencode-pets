@@ -22,6 +22,12 @@ function getConfigPath(): string {
   return join(getConfigDir(), CONFIG_FILENAME);
 }
 
+function useDefaults(reason: string, detail?: unknown): Config {
+  console.warn(`[config] ${reason}:`, detail);
+  writeConfig(DEFAULT_CONFIG);
+  return DEFAULT_CONFIG;
+}
+
 /**
  * Read the config file, validate it with Zod, and return the parsed config.
  * If the file does not exist, creates it with default values.
@@ -35,8 +41,7 @@ export function readConfig(): Config {
     if (!existsSync(configDir)) {
       mkdirSync(configDir, { recursive: true });
     }
-    writeConfig(DEFAULT_CONFIG);
-    return DEFAULT_CONFIG;
+    return useDefaults("Config file missing, creating defaults");
   }
 
   try {
@@ -45,19 +50,15 @@ export function readConfig(): Config {
     const result = ConfigSchema.safeParse(parsed);
 
     if (!result.success) {
-      console.warn(
-        "[config] Invalid config file, using defaults:",
+      return useDefaults(
+        "Invalid config file, using defaults",
         result.error.format(),
       );
-      writeConfig(DEFAULT_CONFIG);
-      return DEFAULT_CONFIG;
     }
 
     return result.data;
   } catch (err) {
-    console.warn("[config] Failed to read config file, using defaults:", err);
-    writeConfig(DEFAULT_CONFIG);
-    return DEFAULT_CONFIG;
+    return useDefaults("Failed to read config file, using defaults", err);
   }
 }
 

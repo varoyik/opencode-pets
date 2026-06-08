@@ -26,6 +26,22 @@ export function createSocketServer(
   let server: net.Server | null = null;
   const sockets = new Set<net.Socket>();
 
+  function broadcast(msg: string): void {
+    for (const socket of sockets) {
+      try {
+        socket.write(msg);
+      } catch (err) {
+        console.warn("[ipc-server] Failed to broadcast:", err);
+      }
+    }
+  }
+
+  function sendToRenderer(channel: string, ...args: unknown[]): void {
+    if (!browserWindow.isDestroyed()) {
+      browserWindow.webContents.send(channel, ...args);
+    }
+  }
+
   function start(): Promise<void> {
     return new Promise((resolve, reject) => {
       const dir = path.dirname(socketPath);
@@ -73,22 +89,15 @@ export function createSocketServer(
 
             switch (msg.type) {
               case "set_mood":
-                if (!browserWindow.isDestroyed()) {
-                  browserWindow.webContents.send(
-                    "mood-changed",
-                    msg.payload.mood,
-                  );
-                }
+                sendToRenderer("mood-changed", msg.payload.mood);
                 break;
 
               case "show_bubble":
-                if (!browserWindow.isDestroyed()) {
-                  browserWindow.webContents.send(
-                    "show-bubble",
-                    msg.payload.text,
-                    msg.payload.duration ?? 5000,
-                  );
-                }
+                sendToRenderer(
+                  "show-bubble",
+                  msg.payload.text,
+                  msg.payload.duration ?? 5000,
+                );
                 break;
 
               case "toggle_visibility":
@@ -102,31 +111,19 @@ export function createSocketServer(
                 break;
 
               case "set_config":
-                if (!browserWindow.isDestroyed()) {
-                  browserWindow.webContents.send("config-changed", msg.payload);
-                }
+                sendToRenderer("config-changed", msg.payload);
                 break;
 
               case "set_pets":
                 petList = msg.payload.pets;
-                if (!browserWindow.isDestroyed()) {
-                  browserWindow.webContents.send(
-                    "pets-changed",
-                    msg.payload.pets,
-                  );
-                }
+                sendToRenderer("pets-changed", msg.payload.pets);
                 break;
 
               case "switch_pet":
                 if (msg.payload.petId) {
                   currentPetId = msg.payload.petId;
                 }
-                if (!browserWindow.isDestroyed()) {
-                  browserWindow.webContents.send(
-                    "switch-pet",
-                    msg.payload.spritesheetPath,
-                  );
-                }
+                sendToRenderer("switch-pet", msg.payload.spritesheetPath);
                 break;
             }
           }
@@ -139,18 +136,9 @@ export function createSocketServer(
 
       // Forward renderer pet switch requests to plugin via socket
       ipcMain.on("request-switch-pet", (_event, petId: string) => {
-        const msg =
-          JSON.stringify({
-            type: "switch_pet",
-            payload: { petId },
-          }) + "\n";
-        for (const socket of sockets) {
-          try {
-            socket.write(msg);
-          } catch (err) {
-            console.warn("[ipc-server] Failed to forward switch_pet:", err);
-          }
-        }
+        broadcast(
+          JSON.stringify({ type: "switch_pet", payload: { petId } }) + "\n",
+        );
       });
 
       // Show native context menu on right-click from renderer
@@ -163,21 +151,12 @@ export function createSocketServer(
               type: "checkbox" as const,
               checked: pet.id === currentPetId,
               click: () => {
-                const msg =
+                broadcast(
                   JSON.stringify({
                     type: "switch_pet",
                     payload: { petId: pet.id },
-                  }) + "\n";
-                for (const socket of sockets) {
-                  try {
-                    socket.write(msg);
-                  } catch (err) {
-                    console.warn(
-                      "[ipc-server] Failed to forward switch_pet:",
-                      err,
-                    );
-                  }
-                }
+                  }) + "\n",
+                );
               },
             })),
           },
@@ -188,29 +167,15 @@ export function createSocketServer(
               if (!browserWindow.isDestroyed()) {
                 browserWindow.hide();
               }
-              const msg =
-                JSON.stringify({ type: "hidden", payload: {} }) + "\n";
-              for (const socket of sockets) {
-                try {
-                  socket.write(msg);
-                } catch (err) {
-                  console.warn("[ipc-server] Failed to send hidden:", err);
-                }
-              }
+              broadcast(JSON.stringify({ type: "hidden", payload: {} }) + "\n");
             },
           },
           {
             label: "Quit Pet",
             click: () => {
-              const msg =
-                JSON.stringify({ type: "quit_pet", payload: {} }) + "\n";
-              for (const socket of sockets) {
-                try {
-                  socket.write(msg);
-                } catch (err) {
-                  console.warn("[ipc-server] Failed to send quit_pet:", err);
-                }
-              }
+              broadcast(
+                JSON.stringify({ type: "quit_pet", payload: {} }) + "\n",
+              );
               app.quit();
             },
           },

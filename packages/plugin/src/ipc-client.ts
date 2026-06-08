@@ -42,18 +42,13 @@ export class IpcClient {
     this.socketPath = socketPath ?? getDefaultSocketPath();
   }
 
-  private buildMoodMessage(mood: PetMood): string {
-    return (
-      JSON.stringify({
-        type: "set_mood",
-        payload: { mood },
-      }) + "\n"
-    );
+  private buildMessage(type: string, payload: unknown): string {
+    return JSON.stringify({ type, payload }) + "\n";
   }
 
   sendMood(mood: PetMood): void {
     this.currentMood = mood;
-    this.send(this.buildMoodMessage(mood));
+    this.send(this.buildMessage("set_mood", { mood }));
   }
 
   sendBubble(text: string, duration?: number): void {
@@ -61,50 +56,27 @@ export class IpcClient {
     if (duration !== undefined) {
       payload.duration = duration;
     }
-    const msg =
-      JSON.stringify({
-        type: "show_bubble",
-        payload,
-      }) + "\n";
-    this.send(msg);
+    this.send(this.buildMessage("show_bubble", payload));
   }
 
   toggleVisibility(): void {
-    const msg =
-      JSON.stringify({
-        type: "toggle_visibility",
-        payload: {},
-      }) + "\n";
-    this.send(msg);
+    this.send(this.buildMessage("toggle_visibility", {}));
   }
 
   sendConfig(config: Config): void {
     this.currentConfig = config;
-    const msg =
-      JSON.stringify({
-        type: "set_config",
-        payload: config,
-      }) + "\n";
-    this.send(msg);
+    this.send(this.buildMessage("set_config", config));
   }
 
   sendPets(pets: PetManifest[]): void {
     this.currentPets = pets;
-    const msg =
-      JSON.stringify({
-        type: "set_pets",
-        payload: { pets },
-      }) + "\n";
-    this.send(msg);
+    this.send(this.buildMessage("set_pets", { pets }));
   }
 
   sendSwitchPet(petId: string, resolvedPath: string): void {
-    const msg =
-      JSON.stringify({
-        type: "switch_pet",
-        payload: { petId, spritesheetPath: resolvedPath },
-      }) + "\n";
-    this.send(msg);
+    this.send(
+      this.buildMessage("switch_pet", { petId, spritesheetPath: resolvedPath }),
+    );
   }
 
   onSwitchPet(callback: (petId: string) => void): void {
@@ -145,7 +117,7 @@ export class IpcClient {
     if (this.state === "closed") return;
 
     this.currentMood = mood;
-    const msg = this.buildMoodMessage(mood);
+    const msg = this.buildMessage("set_mood", { mood });
 
     if (this.state === "connected" && this.socket) {
       this.socket.write(msg);
@@ -164,6 +136,17 @@ export class IpcClient {
     }
   }
 
+  private cleanupSocket(): void {
+    if (this.socket) {
+      try {
+        this.socket.end();
+      } catch {
+        // Ignore cleanup errors
+      }
+      this.socket = null;
+    }
+  }
+
   close(): void {
     this.state = "closed";
     this.queue = [];
@@ -175,14 +158,7 @@ export class IpcClient {
       this.backoffTimer = null;
     }
 
-    if (this.socket) {
-      try {
-        this.socket.end();
-      } catch {
-        // Ignore cleanup errors
-      }
-      this.socket = null;
-    }
+    this.cleanupSocket();
   }
 
   private send(data: string): void {
@@ -230,12 +206,7 @@ export class IpcClient {
               error.message,
             );
           }
-          if (this.state !== "closed" && !this.overlayQuitting) {
-            this.state = "reconnecting";
-            this.scheduleReconnect();
-          } else if (this.overlayQuitting) {
-            this.state = "idle";
-          }
+          this.handleDisconnect();
         },
         error: (_socket, error) => {
           console.error("[ipc-client] socket error:", error.message);
@@ -247,12 +218,7 @@ export class IpcClient {
         },
         end: (_socket) => {
           this.socket = null;
-          if (this.state !== "closed" && !this.overlayQuitting) {
-            this.state = "reconnecting";
-            this.scheduleReconnect();
-          } else if (this.overlayQuitting) {
-            this.state = "idle";
-          }
+          this.handleDisconnect();
         },
       },
     })
@@ -274,24 +240,29 @@ export class IpcClient {
       });
   }
 
+  private handleDisconnect(): void {
+    if (this.state !== "closed" && !this.overlayQuitting) {
+      this.state = "reconnecting";
+      this.scheduleReconnect();
+    } else if (this.overlayQuitting) {
+      this.state = "idle";
+    }
+  }
+
   private sendHandshake(): void {
     if (!this.socket) return;
     if (this.currentConfig) {
-      this.socket.write(
-        JSON.stringify({ type: "set_config", payload: this.currentConfig }) +
-          "\n",
-      );
+      this.socket.write(this.buildMessage("set_config", this.currentConfig));
     }
     if (this.currentPets) {
       this.socket.write(
-        JSON.stringify({
-          type: "set_pets",
-          payload: { pets: this.currentPets },
-        }) + "\n",
+        this.buildMessage("set_pets", { pets: this.currentPets }),
       );
     }
     if (this.currentMood) {
-      this.socket.write(this.buildMoodMessage(this.currentMood));
+      this.socket.write(
+        this.buildMessage("set_mood", { mood: this.currentMood }),
+      );
     }
   }
 
@@ -327,14 +298,7 @@ export class IpcClient {
           this.onQuitPetCallback();
         }
         // End the socket gracefully but keep client alive for potential respawn.
-        if (this.socket) {
-          try {
-            this.socket.end();
-          } catch {
-            // Ignore cleanup errors
-          }
-          this.socket = null;
-        }
+        this.cleanupSocket();
         this.state = "idle";
         this.queue = [];
         this.incomingBuffer = "";

@@ -8,28 +8,32 @@ const ALL_MOODS = [
 ] as const;
 
 document.addEventListener("DOMContentLoaded", () => {
-  const petDiv = document.getElementById("pet");
-  const bubbleDiv = document.getElementById("bubble");
+  const pet = document.getElementById("pet")!;
+  const bubble = document.getElementById("bubble")!;
 
-  if (!petDiv || !bubbleDiv) return;
+  if (!pet || !bubble) return;
 
   const spritesheetUrl = window.electronAPI.getSpritesheetPath();
 
   if (spritesheetUrl) {
-    petDiv.style.backgroundImage = `url(${spritesheetUrl})`;
-    petDiv.classList.add("state-idle");
+    pet.style.backgroundImage = `url(${spritesheetUrl})`;
+    pet.classList.add("state-idle");
   }
 
   let bubbleDurationMs = 5000;
   let pets: { id: string; displayName: string; spritesheetPath: string }[] = [];
   let currentMood = "idle";
 
+  function clearMoodClasses(): void {
+    for (const m of ALL_MOODS) {
+      pet.classList.remove(`state-${m}`);
+    }
+  }
+
   function setMood(mood: string): void {
     currentMood = mood;
-    for (const m of ALL_MOODS) {
-      petDiv!.classList.remove(`state-${m}`);
-    }
-    petDiv!.classList.add(`state-${mood}`);
+    clearMoodClasses();
+    pet.classList.add(`state-${mood}`);
   }
 
   window.electronAPI.onMoodChanged((mood: string) => {
@@ -44,11 +48,11 @@ document.addEventListener("DOMContentLoaded", () => {
       bubbleTimer = null;
     }
 
-    bubbleDiv!.textContent = text;
-    bubbleDiv!.classList.remove("bubble-hidden");
+    bubble.textContent = text;
+    bubble.classList.remove("bubble-hidden");
 
     bubbleTimer = setTimeout(() => {
-      bubbleDiv!.classList.add("bubble-hidden");
+      bubble.classList.add("bubble-hidden");
       bubbleTimer = null;
     }, duration);
   }
@@ -68,11 +72,11 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   window.electronAPI.onSwitchPet((spritesheetPath: string) => {
-    petDiv!.style.backgroundImage = `url(file://${spritesheetPath})`;
+    pet.style.backgroundImage = `url(file://${spritesheetPath})`;
   });
 
   // Context menu: suppress browser default, request native menu from main
-  petDiv.addEventListener("contextmenu", (e) => {
+  pet.addEventListener("contextmenu", (e) => {
     e.preventDefault();
     window.electronAPI.showContextMenu();
   });
@@ -81,11 +85,11 @@ document.addEventListener("DOMContentLoaded", () => {
   let lastX = 0;
   let lastY = 0;
 
-  petDiv.addEventListener("mousedown", (e) => {
+  pet.addEventListener("mousedown", (e) => {
     isDragging = true;
     lastX = e.screenX;
     lastY = e.screenY;
-    petDiv.classList.add("dragging");
+    pet.classList.add("dragging");
   });
 
   window.addEventListener("mousemove", (e) => {
@@ -96,21 +100,17 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Directional animation based on drag velocity
     if (velocity < -5) {
-      for (const m of ALL_MOODS) {
-        petDiv!.classList.remove(`state-${m}`);
-      }
-      petDiv!.classList.remove("run-right");
-      petDiv!.classList.add("run-left");
+      clearMoodClasses();
+      pet.classList.remove("run-right");
+      pet.classList.add("run-left");
     } else if (velocity > 5) {
-      for (const m of ALL_MOODS) {
-        petDiv!.classList.remove(`state-${m}`);
-      }
-      petDiv!.classList.remove("run-left");
-      petDiv!.classList.add("run-right");
+      clearMoodClasses();
+      pet.classList.remove("run-left");
+      pet.classList.add("run-right");
     } else {
-      petDiv!.classList.remove("run-left");
-      petDiv!.classList.remove("run-right");
-      petDiv!.classList.add(`state-${currentMood}`);
+      pet.classList.remove("run-left");
+      pet.classList.remove("run-right");
+      pet.classList.add(`state-${currentMood}`);
     }
 
     lastX = e.screenX;
@@ -121,10 +121,10 @@ document.addEventListener("DOMContentLoaded", () => {
   window.addEventListener("mouseup", () => {
     if (isDragging) {
       isDragging = false;
-      petDiv.classList.remove("dragging");
-      petDiv.classList.remove("run-left");
-      petDiv.classList.remove("run-right");
-      petDiv.classList.add(`state-${currentMood}`);
+      pet.classList.remove("dragging");
+      pet.classList.remove("run-left");
+      pet.classList.remove("run-right");
+      pet.classList.add(`state-${currentMood}`);
     }
   });
 });

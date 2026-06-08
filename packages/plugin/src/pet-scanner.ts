@@ -103,32 +103,18 @@ export function scanPets(): PetManifest[] {
   const codexResult = scanPetsDir(getCodexPetsDir());
 
   // Log warnings for invalid pets
-  for (const error of bundledResult.errors) {
-    console.warn("[pet-scanner]", error);
-  }
-  for (const error of userResult.errors) {
-    console.warn("[pet-scanner]", error);
-  }
-  for (const error of codexResult.errors) {
-    console.warn("[pet-scanner]", error);
+  for (const result of [bundledResult, userResult, codexResult]) {
+    for (const error of result.errors) {
+      console.warn("[pet-scanner]", error);
+    }
   }
 
   // Deduplicate by ID with priority: user OpenCode > user Codex > bundled
   const petMap = new Map<string, PetManifest>();
-
-  // Add bundled pets first (lowest priority)
-  for (const pet of bundledResult.pets) {
-    petMap.set(pet.id, pet);
-  }
-
-  // Add Codex pets (medium priority)
-  for (const pet of codexResult.pets) {
-    petMap.set(pet.id, pet);
-  }
-
-  // Add user OpenCode pets (highest priority)
-  for (const pet of userResult.pets) {
-    petMap.set(pet.id, pet);
+  for (const result of [bundledResult, codexResult, userResult]) {
+    for (const pet of result.pets) {
+      petMap.set(pet.id, pet);
+    }
   }
 
   return Array.from(petMap.values());
