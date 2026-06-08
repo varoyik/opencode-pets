@@ -12,6 +12,8 @@ export type {
   IpcSetConfigPayload,
   IpcSetPetsPayload,
   IpcSwitchPetPayload,
+  IpcQuitPetPayload,
+  IpcHiddenPayload,
 } from "./ipc.js";
 
 export { PetManifestSchema } from "./pets.js";

@@ -74,4 +74,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   sendDragDelta: (dx: number, dy: number): void => {
     ipcRenderer.send("drag-delta", dx, dy);
   },
+  showContextMenu: (): void => {
+    ipcRenderer.send("show-context-menu");
+  },
 });

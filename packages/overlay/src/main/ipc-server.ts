@@ -1,8 +1,12 @@
 import net from "node:net";
 import fs from "node:fs";
 import path from "node:path";
-import { ipcMain, type BrowserWindow } from "electron";
+import { ipcMain, type BrowserWindow, Menu, app } from "electron";
 import { parseIpcMessage } from "@opencode-pets/core";
+import type { PetManifest } from "@opencode-pets/core";
+
+let petList: PetManifest[] = [];
+let currentPetId = "";
 
 export interface SocketServer {
   start(): Promise<void>;
@@ -104,6 +108,7 @@ export function createSocketServer(
                 break;
 
               case "set_pets":
+                petList = msg.payload.pets;
                 if (!browserWindow.isDestroyed()) {
                   browserWindow.webContents.send(
                     "pets-changed",
@@ -113,6 +118,9 @@ export function createSocketServer(
                 break;
 
               case "switch_pet":
+                if (msg.payload.petId) {
+                  currentPetId = msg.payload.petId;
+                }
                 if (!browserWindow.isDestroyed()) {
                   browserWindow.webContents.send(
                     "switch-pet",
@@ -145,6 +153,73 @@ export function createSocketServer(
         }
       });
 
+      // Show native context menu on right-click from renderer
+      ipcMain.on("show-context-menu", () => {
+        const template: Electron.MenuItemConstructorOptions[] = [
+          {
+            label: "Switch Pet",
+            submenu: petList.map((pet) => ({
+              label: pet.displayName,
+              type: "checkbox" as const,
+              checked: pet.id === currentPetId,
+              click: () => {
+                const msg =
+                  JSON.stringify({
+                    type: "switch_pet",
+                    payload: { petId: pet.id },
+                  }) + "\n";
+                for (const socket of sockets) {
+                  try {
+                    socket.write(msg);
+                  } catch (err) {
+                    console.warn(
+                      "[ipc-server] Failed to forward switch_pet:",
+                      err,
+                    );
+                  }
+                }
+              },
+            })),
+          },
+          { type: "separator" },
+          {
+            label: "Hide Pet",
+            click: () => {
+              if (!browserWindow.isDestroyed()) {
+                browserWindow.hide();
+              }
+              const msg =
+                JSON.stringify({ type: "hidden", payload: {} }) + "\n";
+              for (const socket of sockets) {
+                try {
+                  socket.write(msg);
+                } catch (err) {
+                  console.warn("[ipc-server] Failed to send hidden:", err);
+                }
+              }
+            },
+          },
+          {
+            label: "Quit Pet",
+            click: () => {
+              const msg =
+                JSON.stringify({ type: "quit_pet", payload: {} }) + "\n";
+              for (const socket of sockets) {
+                try {
+                  socket.write(msg);
+                } catch (err) {
+                  console.warn("[ipc-server] Failed to send quit_pet:", err);
+                }
+              }
+              app.quit();
+            },
+          },
+        ];
+
+        const menu = Menu.buildFromTemplate(template);
+        menu.popup();
+      });
+
       // Bun types omit EventEmitter; Electron's runtime has it
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (server as any).on("error", (err: Error) => {
@@ -175,6 +250,7 @@ export function createSocketServer(
       (server as any).removeAllListeners("error");
 
       ipcMain.removeAllListeners("request-switch-pet");
+      ipcMain.removeAllListeners("show-context-menu");
 
       for (const socket of sockets) socket.destroy();
       sockets.clear();

@@ -52,6 +52,14 @@ body {
   animation: pet-error 0.8s steps(8) infinite;
 }
 
+.run-right {
+  animation: pet-run-right 0.6s steps(8) infinite;
+}
+
+.run-left {
+  animation: pet-run-left 0.6s steps(8) infinite;
+}
+
 @keyframes pet-idle {
   from {
     background-position: 0 0;
@@ -103,6 +111,24 @@ body {
   }
   to {
     background-position: -1536px -1040px;
+  }
+}
+
+@keyframes pet-run-right {
+  from {
+    background-position: 0 -208px;
+  }
+  to {
+    background-position: -1536px -208px;
+  }
+}
+
+@keyframes pet-run-left {
+  from {
+    background-position: 0 -416px;
+  }
+  to {
+    background-position: -1536px -416px;
   }
 }
 

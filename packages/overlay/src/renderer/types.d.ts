@@ -20,6 +20,7 @@ export interface IElectronAPI {
   onSwitchPet: (callback: (spritesheetPath: string) => void) => void;
   requestSwitchPet: (petId: string) => void;
   sendDragDelta: (dx: number, dy: number) => void;
+  showContextMenu: () => void;
 }
 
 declare global {

@@ -28,6 +28,10 @@ const switchPetPayload = z.object({
   spritesheetPath: z.string().optional(),
 });
 
+const quitPetPayload = z.object({});
+
+const hiddenPayload = z.object({});
+
 export const IpcMessageSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("set_mood"),
@@ -53,6 +57,14 @@ export const IpcMessageSchema = z.discriminatedUnion("type", [
     type: z.literal("switch_pet"),
     payload: switchPetPayload,
   }),
+  z.object({
+    type: z.literal("quit_pet"),
+    payload: quitPetPayload,
+  }),
+  z.object({
+    type: z.literal("hidden"),
+    payload: hiddenPayload,
+  }),
 ]);
 
 export type IpcMessage = z.infer<typeof IpcMessageSchema>;
@@ -65,6 +77,8 @@ export type IpcToggleVisibilityPayload = z.infer<
 export type IpcSetConfigPayload = z.infer<typeof setConfigPayload>;
 export type IpcSetPetsPayload = z.infer<typeof setPetsPayload>;
 export type IpcSwitchPetPayload = z.infer<typeof switchPetPayload>;
+export type IpcQuitPetPayload = z.infer<typeof quitPetPayload>;
+export type IpcHiddenPayload = z.infer<typeof hiddenPayload>;
 
 /**
  * Safely parse and validate an IPC message from JSON.
