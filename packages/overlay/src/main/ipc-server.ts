@@ -30,9 +30,7 @@ export function createSocketServer(
     for (const socket of sockets) {
       try {
         socket.write(msg);
-      } catch (err) {
-        console.warn("[ipc-server] Failed to broadcast:", err);
-      }
+      } catch (err) {}
     }
   }
 
@@ -77,13 +75,11 @@ export function createSocketServer(
             try {
               raw = JSON.parse(trimmed);
             } catch {
-              console.warn("[ipc-server] Invalid JSON:", trimmed);
               continue;
             }
 
             const msg = parseIpcMessage(raw);
             if (!msg) {
-              console.warn("[ipc-server] Invalid IPC message:", trimmed);
               continue;
             }
 
@@ -129,8 +125,8 @@ export function createSocketServer(
           }
         });
 
-        socket.on("error", (err: Error) => {
-          console.warn("[ipc-server] Socket error:", err.message);
+        socket.on("error", (_err: Error) => {
+          // Silently ignore socket errors — plugin handles reconnection.
         });
       });
 

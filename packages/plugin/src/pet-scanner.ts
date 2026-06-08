@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { PetManifestSchema } from "@opencode-pets/core";
-import type { PetManifest } from "@opencode-pets/core";
+import type { LogFn, PetManifest } from "@opencode-pets/core";
 import { homedir } from "node:os";
 import { resolveOverlayPath } from "./overlay-manager.js";
 
@@ -97,15 +97,17 @@ function scanPetsDir(dir: string): ScanResult {
  * Priority: user OpenCode > user Codex > bundled.
  * Invalid pets are skipped with warning logs.
  */
-export function scanPets(): PetManifest[] {
+export function scanPets(log?: LogFn): PetManifest[] {
   const bundledResult = scanPetsDir(getBundledPetsDir());
   const userResult = scanPetsDir(getUserPetsDir());
   const codexResult = scanPetsDir(getCodexPetsDir());
 
   // Log warnings for invalid pets
-  for (const result of [bundledResult, userResult, codexResult]) {
-    for (const error of result.errors) {
-      console.warn("[pet-scanner]", error);
+  if (log) {
+    for (const result of [bundledResult, userResult, codexResult]) {
+      for (const error of result.errors) {
+        log("warn", error);
+      }
     }
   }
 

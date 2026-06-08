@@ -1,4 +1,4 @@
-import type { PetMood, Config, PetManifest } from "@opencode-pets/core";
+import type { LogFn, PetMood, Config, PetManifest } from "@opencode-pets/core";
 import { parseIpcMessage } from "@opencode-pets/core";
 
 const MAX_QUEUE_SIZE = 10;
@@ -37,9 +37,25 @@ export class IpcClient {
   private incomingBuffer = "";
   private overlayQuitting = false;
   private overlayHidden = false;
+  private readonly log: LogFn | undefined;
+  private readonly onReconnectExhausted: (() => void) | undefined;
 
-  constructor(socketPath?: string) {
+  constructor(
+    socketPath?: string,
+    log?: LogFn,
+    onReconnectExhausted?: () => void,
+  ) {
+    this.log = log;
+    this.onReconnectExhausted = onReconnectExhausted;
     this.socketPath = socketPath ?? getDefaultSocketPath();
+  }
+
+  private doLog(
+    level: "debug" | "info" | "warn" | "error",
+    message: string,
+    extra?: Record<string, unknown>,
+  ): void {
+    this.log?.(level, message, extra);
   }
 
   private buildMessage(type: string, payload: unknown): string {
@@ -201,19 +217,20 @@ export class IpcClient {
         close: (_socket, error) => {
           this.socket = null;
           if (error && !this.overlayQuitting) {
-            console.error(
-              "[ipc-client] socket closed with error:",
-              error.message,
-            );
+            this.doLog("debug", "socket closed with error", {
+              error: error.message,
+            });
           }
           this.handleDisconnect();
         },
         error: (_socket, error) => {
-          console.error("[ipc-client] socket error:", error.message);
+          this.doLog("debug", "socket error", { error: error.message });
         },
         connectError: (_socket, error) => {
           if (this.hasConnected) {
-            console.error("[ipc-client] connection failed:", error.message);
+            this.doLog("debug", "connection failed", {
+              error: error.message,
+            });
           }
         },
         end: (_socket) => {
@@ -280,13 +297,13 @@ export class IpcClient {
       try {
         raw = JSON.parse(trimmed);
       } catch {
-        console.warn("[ipc-client] Invalid JSON:", trimmed);
+        this.doLog("warn", "Invalid IPC JSON received", { raw: trimmed });
         continue;
       }
 
       const msg = parseIpcMessage(raw);
       if (!msg) {
-        console.warn("[ipc-client] Invalid IPC message:", trimmed);
+        this.doLog("warn", "Invalid IPC message received", { raw: trimmed });
         continue;
       }
 
@@ -320,17 +337,16 @@ export class IpcClient {
 
     if (this.overlayQuitting) {
       this.state = "idle";
-      console.log("[ipc-client] overlay quit intentionally — not reconnecting");
+      this.doLog("debug", "overlay quit intentionally — not reconnecting");
       return;
     }
 
     if (this.retryCount >= MAX_RETRIES) {
       this.state = "idle";
-      console.error(
-        "[ipc-client] reconnection exhausted after",
-        MAX_RETRIES,
-        "attempts",
-      );
+      this.doLog("error", "reconnection exhausted", {
+        retries: MAX_RETRIES,
+      });
+      this.onReconnectExhausted?.();
       return;
     }
 

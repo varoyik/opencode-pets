@@ -21,7 +21,6 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   let bubbleDurationMs = 5000;
-  let pets: { id: string; displayName: string; spritesheetPath: string }[] = [];
   let currentMood = "idle";
 
   function clearMoodClasses(): void {
@@ -65,10 +64,8 @@ document.addEventListener("DOMContentLoaded", () => {
     bubbleDurationMs = config.bubbleDurationMs;
   });
 
-  window.electronAPI.onPetsChanged((newPets) => {
-    pets = newPets;
-    // Stored in memory for future pet selector UI (Change 2: interaction-polish)
-    console.log("[renderer] Pets updated:", pets.length);
+  window.electronAPI.onPetsChanged((_newPets) => {
+    // Reserved for future pet selector UI.
   });
 
   window.electronAPI.onSwitchPet((spritesheetPath: string) => {

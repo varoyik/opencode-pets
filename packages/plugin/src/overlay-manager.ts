@@ -1,6 +1,7 @@
 import type { Subprocess } from "bun";
 import os from "node:os";
 import path from "node:path";
+import type { LogFn } from "@opencode-pets/core";
 
 export function resolveOverlayPath(): string {
   return path.join(os.homedir(), ".opencode-pets", "overlay");
@@ -26,10 +27,12 @@ export async function healthCheck(socketPath: string): Promise<boolean> {
   return false;
 }
 
-export function killOverlay(process: Subprocess): void {
+export function killOverlay(process: Subprocess, log?: LogFn): void {
   try {
     process.kill();
   } catch (err) {
-    console.error("[overlay-manager] failed to kill overlay process:", err);
+    log?.("error", "Failed to kill overlay process", {
+      error: String(err),
+    });
   }
 }
