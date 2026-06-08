@@ -32,7 +32,11 @@ export class IpcClient {
   private currentPets: PetManifest[] | null = null;
   private currentMood: PetMood | null = null;
   private onSwitchPetCallback: ((petId: string) => void) | null = null;
+  private onQuitPetCallback: (() => void) | null = null;
+  private onHiddenCallback: (() => void) | null = null;
   private incomingBuffer = "";
+  private overlayQuitting = false;
+  private overlayHidden = false;
 
   constructor(socketPath?: string) {
     this.socketPath = socketPath ?? getDefaultSocketPath();
@@ -107,6 +111,30 @@ export class IpcClient {
     this.onSwitchPetCallback = callback;
   }
 
+  onQuitPet(callback: () => void): void {
+    this.onQuitPetCallback = callback;
+  }
+
+  onHidden(callback: () => void): void {
+    this.onHiddenCallback = callback;
+  }
+
+  isOverlayQuitting(): boolean {
+    return this.overlayQuitting;
+  }
+
+  isOverlayHidden(): boolean {
+    return this.overlayHidden;
+  }
+
+  resetQuittingState(): void {
+    this.overlayQuitting = false;
+  }
+
+  setOverlayHidden(hidden: boolean): void {
+    this.overlayHidden = hidden;
+  }
+
   /**
    * Send the current mood immediately if connected, or queue it if not.
    * Unlike sendMood(), this does not append to the queue if already connected —
@@ -140,6 +168,7 @@ export class IpcClient {
     this.state = "closed";
     this.queue = [];
     this.incomingBuffer = "";
+    this.overlayHidden = false;
 
     if (this.backoffTimer !== null) {
       clearTimeout(this.backoffTimer);
@@ -173,7 +202,7 @@ export class IpcClient {
   }
 
   private connect(): void {
-    if (this.state === "closed") return;
+    if (this.state === "closed" || this.overlayQuitting) return;
     this.state = "connecting";
 
     Bun.connect({
@@ -195,15 +224,17 @@ export class IpcClient {
         },
         close: (_socket, error) => {
           this.socket = null;
-          if (error) {
+          if (error && !this.overlayQuitting) {
             console.error(
               "[ipc-client] socket closed with error:",
               error.message,
             );
           }
-          if (this.state !== "closed") {
+          if (this.state !== "closed" && !this.overlayQuitting) {
             this.state = "reconnecting";
             this.scheduleReconnect();
+          } else if (this.overlayQuitting) {
+            this.state = "idle";
           }
         },
         error: (_socket, error) => {
@@ -216,9 +247,11 @@ export class IpcClient {
         },
         end: (_socket) => {
           this.socket = null;
-          if (this.state !== "closed") {
+          if (this.state !== "closed" && !this.overlayQuitting) {
             this.state = "reconnecting";
             this.scheduleReconnect();
+          } else if (this.overlayQuitting) {
+            this.state = "idle";
           }
         },
       },
@@ -232,7 +265,9 @@ export class IpcClient {
         }
       })
       .catch(() => {
-        if (this.state === "connecting") {
+        if (this.overlayQuitting) {
+          this.state = "idle";
+        } else if (this.state === "connecting") {
           this.state = "reconnecting";
           this.scheduleReconnect();
         }
@@ -286,12 +321,44 @@ export class IpcClient {
 
       if (msg.type === "switch_pet" && this.onSwitchPetCallback) {
         this.onSwitchPetCallback(msg.payload.petId);
+      } else if (msg.type === "quit_pet") {
+        this.overlayQuitting = true;
+        if (this.onQuitPetCallback) {
+          this.onQuitPetCallback();
+        }
+        // End the socket gracefully but keep client alive for potential respawn.
+        if (this.socket) {
+          try {
+            this.socket.end();
+          } catch {
+            // Ignore cleanup errors
+          }
+          this.socket = null;
+        }
+        this.state = "idle";
+        this.queue = [];
+        this.incomingBuffer = "";
+        if (this.backoffTimer !== null) {
+          clearTimeout(this.backoffTimer);
+          this.backoffTimer = null;
+        }
+      } else if (msg.type === "hidden") {
+        this.overlayHidden = true;
+        if (this.onHiddenCallback) {
+          this.onHiddenCallback();
+        }
       }
     }
   }
 
   private scheduleReconnect(): void {
     if (this.backoffTimer !== null) return;
+
+    if (this.overlayQuitting) {
+      this.state = "idle";
+      console.log("[ipc-client] overlay quit intentionally — not reconnecting");
+      return;
+    }
 
     if (this.retryCount >= MAX_RETRIES) {
       this.state = "idle";

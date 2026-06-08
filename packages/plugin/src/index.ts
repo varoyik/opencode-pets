@@ -42,6 +42,18 @@ const petPlugin: Plugin = async (input) => {
     ipcClient.sendSwitchPet(pet.id, pet.spritesheetPath);
   });
 
+  ipcClient.onQuitPet(() => {
+    console.log("[plugin] overlay sent quit_pet — stopping management");
+    if (overlayProcess) {
+      killOverlay(overlayProcess);
+      overlayProcess = null;
+    }
+  });
+
+  ipcClient.onHidden(() => {
+    console.log("[plugin] overlay hidden");
+  });
+
   return {
     config: async (config) => {
       if (config.command === undefined) {
@@ -82,8 +94,15 @@ const petPlugin: Plugin = async (input) => {
       if (cmdInput.command !== "pet") return;
 
       let message: string;
-      if (overlayProcess === null || overlayProcess.exitCode !== null) {
-        // Spawn on first use or after crash. Window auto-shows.
+
+      const overlayDead =
+        overlayProcess === null || overlayProcess.exitCode !== null;
+
+      if (ipcClient.isOverlayQuitting() || overlayDead) {
+        // Respawn after intentional quit or first use / crash.
+        // Reset quitting state so the new overlay can connect.
+        ipcClient.resetQuittingState();
+        ipcClient.setOverlayHidden(false);
         overlayProcess = spawnOverlay();
         // Send config + pets + default pet, then current mood
         ipcClient.sendConfig(config);
@@ -105,6 +124,8 @@ const petPlugin: Plugin = async (input) => {
       } else {
         // Already running → toggle visibility
         ipcClient.toggleVisibility();
+        // Optimistically clear hidden flag — toggle will show if hidden.
+        ipcClient.setOverlayHidden(false);
         message = "Pet visibility toggled.";
       }
 

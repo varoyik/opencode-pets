@@ -36,7 +36,12 @@ export function killOverlay(process: Subprocess): void {
 
 export async function startOverlay(
   socketPath: string,
+  overlayQuitting = false,
 ): Promise<Subprocess | undefined> {
+  if (overlayQuitting) {
+    // Overlay was intentionally quit — do not auto-respawn.
+    return undefined;
+  }
   try {
     const proc = spawnOverlay();
     const ready = await healthCheck(socketPath);
@@ -54,4 +59,14 @@ export async function startOverlay(
     console.error("[overlay-manager] failed to start overlay:", err);
     return undefined;
   }
+}
+
+/**
+ * Respawn the overlay after it was intentionally quit.
+ * Callers must reset the IpcClient quitting state before calling this.
+ */
+export async function respawnOverlay(
+  socketPath: string,
+): Promise<Subprocess | undefined> {
+  return startOverlay(socketPath, false);
 }

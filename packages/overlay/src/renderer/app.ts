@@ -22,8 +22,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
   let bubbleDurationMs = 5000;
   let pets: { id: string; displayName: string; spritesheetPath: string }[] = [];
+  let currentMood = "idle";
 
   function setMood(mood: string): void {
+    currentMood = mood;
     for (const m of ALL_MOODS) {
       petDiv!.classList.remove(`state-${m}`);
     }
@@ -69,6 +71,12 @@ document.addEventListener("DOMContentLoaded", () => {
     petDiv!.style.backgroundImage = `url(file://${spritesheetPath})`;
   });
 
+  // Context menu: suppress browser default, request native menu from main
+  petDiv.addEventListener("contextmenu", (e) => {
+    e.preventDefault();
+    window.electronAPI.showContextMenu();
+  });
+
   let isDragging = false;
   let lastX = 0;
   let lastY = 0;
@@ -84,6 +92,27 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!isDragging) return;
     const dx = e.screenX - lastX;
     const dy = e.screenY - lastY;
+    const velocity = e.screenX - lastX;
+
+    // Directional animation based on drag velocity
+    if (velocity < -5) {
+      for (const m of ALL_MOODS) {
+        petDiv!.classList.remove(`state-${m}`);
+      }
+      petDiv!.classList.remove("run-right");
+      petDiv!.classList.add("run-left");
+    } else if (velocity > 5) {
+      for (const m of ALL_MOODS) {
+        petDiv!.classList.remove(`state-${m}`);
+      }
+      petDiv!.classList.remove("run-left");
+      petDiv!.classList.add("run-right");
+    } else {
+      petDiv!.classList.remove("run-left");
+      petDiv!.classList.remove("run-right");
+      petDiv!.classList.add(`state-${currentMood}`);
+    }
+
     lastX = e.screenX;
     lastY = e.screenY;
     window.electronAPI.sendDragDelta(dx, dy);
@@ -93,6 +122,9 @@ document.addEventListener("DOMContentLoaded", () => {
     if (isDragging) {
       isDragging = false;
       petDiv.classList.remove("dragging");
+      petDiv.classList.remove("run-left");
+      petDiv.classList.remove("run-right");
+      petDiv.classList.add(`state-${currentMood}`);
     }
   });
 });
