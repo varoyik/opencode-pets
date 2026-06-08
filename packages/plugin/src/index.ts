@@ -19,10 +19,6 @@ const petPlugin: Plugin = async (input) => {
   const ipcClient = new IpcClient(socketPath);
   const stateDeriver = new StateDeriver(ipcClient, config.idleTimeoutMs);
 
-  // Send initial config and pets to overlay (queued until connection)
-  ipcClient.sendConfig(config);
-  ipcClient.sendPets(pets);
-
   function switchToDefaultPet(defaultPetId: string): void {
     const pet = pets.find((p) => p.id === defaultPetId);
     if (pet) {
@@ -33,8 +29,6 @@ const petPlugin: Plugin = async (input) => {
       );
     }
   }
-
-  switchToDefaultPet(config.defaultPet);
 
   let overlayProcess: Subprocess | null = null;
   let unwatchConfig: (() => void) | null = null;
@@ -59,27 +53,20 @@ const petPlugin: Plugin = async (input) => {
       };
     },
 
-    event: async ({ event }) => {
-      // Shutdown: kill overlay process and close IPC connection.
-      // "global.disposed" is v2-only but checked at runtime; widen to string
-      // to avoid a type-level overlap error with the v1 Event union.
-      const eventType: string = event.type;
-      if (
-        eventType === "server.instance.disposed" ||
-        eventType === "global.disposed"
-      ) {
-        stateDeriver.dispose();
-        if (overlayProcess) {
-          killOverlay(overlayProcess);
-        }
-        ipcClient.close();
-        if (unwatchConfig) {
-          unwatchConfig();
-          unwatchConfig = null;
-        }
-        return;
+    dispose: async () => {
+      stateDeriver.dispose();
+      if (overlayProcess) {
+        killOverlay(overlayProcess);
+        overlayProcess = null;
       }
+      ipcClient.close();
+      if (unwatchConfig) {
+        unwatchConfig();
+        unwatchConfig = null;
+      }
+    },
 
+    event: async ({ event }) => {
       stateDeriver.handleSseEvent(event);
     },
 
@@ -98,10 +85,11 @@ const petPlugin: Plugin = async (input) => {
       if (overlayProcess === null || overlayProcess.exitCode !== null) {
         // Spawn on first use or after crash. Window auto-shows.
         overlayProcess = spawnOverlay();
-        // Send current mood immediately to avoid stale queue replay
-        ipcClient.sendCurrentMood(stateDeriver.getCurrentMood());
-        // Show the configured default pet
+        // Send config + pets + default pet, then current mood
+        ipcClient.sendConfig(config);
+        ipcClient.sendPets(pets);
         switchToDefaultPet(config.defaultPet);
+        ipcClient.sendCurrentMood(stateDeriver.getCurrentMood());
         message = "Pet overlay launched.";
 
         // Start config watcher after first spawn
