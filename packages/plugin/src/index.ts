@@ -108,8 +108,8 @@ const petPlugin: Plugin = async (input) => {
       stateDeriver.handleSseEvent(event);
     },
 
-    "tool.execute.before": async () => {
-      stateDeriver.handleEvent({ type: "ToolRunning" });
+    "tool.execute.before": async (input) => {
+      stateDeriver.handleEvent({ type: "ToolRunning", toolName: input.tool });
     },
 
     "tool.execute.after": async () => {

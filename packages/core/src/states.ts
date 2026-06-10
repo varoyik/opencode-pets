@@ -26,12 +26,12 @@ export interface PetState {
 }
 
 export type PetEvent =
-  | { type: "ToolRunning" }
+  | { type: "ToolRunning"; toolName?: string }
   | { type: "ToolCompleted" }
   | { type: "StreamStarted" }
   | { type: "StreamEnded" }
   | { type: "SessionCompleted" }
   | { type: "TaskErrored" }
-  | { type: "PermissionPrompted" }
+  | { type: "PermissionPrompted"; permissionTitle?: string }
   | { type: "PermissionResolved" }
   | { type: "IdleTimeout" };

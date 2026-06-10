@@ -12,7 +12,7 @@ interface SdkEvent {
 }
 
 interface PartUpdatedProps {
-  part: { id: string; type: string };
+  part: { id: string; type: string; text?: string };
 }
 
 interface PartRemovedProps {
@@ -25,10 +25,38 @@ interface PartRemovedProps {
  */
 interface IpcClientLike {
   sendMood(mood: PetMood): void;
+  sendBubble(text: string, duration?: number): void;
 }
 
 /** Part types that indicate the agent is actively generating a response. */
 const STREAM_PART_TYPES = new Set(["text", "reasoning", "step-start"]);
+
+const IDLE_PHRASES = [
+  "Just chilling...",
+  "Watching you code...",
+  "Zzz...",
+  "Waiting for instructions...",
+  "*stretch*",
+];
+
+const DONE_PHRASES = ["Done!", "Task complete!", "All done!"];
+const ERROR_PHRASES = ["Oops!", "Something went wrong", "Error!"];
+
+const TOOL_BUBBLE_MAP: Record<string, string> = {
+  bash: "Running command...",
+  read: "Reading files...",
+  write: "Writing files...",
+  grep: "Searching code...",
+  glob: "Searching files...",
+  edit: "Editing files...",
+  apply_patch: "Applying changes...",
+  webfetch: "Fetching web content...",
+  websearch: "Searching the web...",
+  question: "Asking a question...",
+  skill: "Loading skill...",
+  todowrite: "Managing tasks...",
+  lsp: "Getting code intelligence...",
+};
 
 export class StateDeriver {
   private state: PetState;
@@ -38,6 +66,11 @@ export class StateDeriver {
   private readonly idleTimeoutMs: number;
   private activeStreamParts = new Set<string>();
   private hasError = false;
+  private currentBubbleText: string | null = null;
+  private currentToolName: string | null = null;
+  private currentReasoningText: string | null = null;
+  private currentPermissionTitle: string | null = null;
+  private idlePhraseIndex = 0;
 
   constructor(ipcClient: IpcClientLike, idleTimeoutMs = 30_000) {
     this.ipcClient = ipcClient;
@@ -47,10 +80,27 @@ export class StateDeriver {
   }
 
   handleEvent(event: PetEvent): void {
+    // Extract context from event before calling the pure reducer
+    if (event.type === "ToolRunning" && event.toolName) {
+      this.currentToolName = event.toolName;
+    }
+    if (event.type === "PermissionPrompted" && event.permissionTitle) {
+      this.currentPermissionTitle = event.permissionTitle;
+    }
+
     const newState = reducer(this.state, event);
 
     if (newState.mood !== this.state.mood) {
       this.ipcClient.sendMood(newState.mood);
+      const bubbleText = this.resolveBubbleText(newState);
+      this.currentBubbleText = bubbleText;
+      this.ipcClient.sendBubble(bubbleText, this.getBubbleDuration(newState));
+    } else if (this.shouldUpdateBubbleInSameMood(event, newState)) {
+      const bubbleText = this.resolveBubbleText(newState);
+      if (bubbleText !== this.currentBubbleText) {
+        this.currentBubbleText = bubbleText;
+        this.ipcClient.sendBubble(bubbleText, this.getBubbleDuration(newState));
+      }
     }
 
     // When the temporary error state expires, clear the error flag so it
@@ -78,6 +128,12 @@ export class StateDeriver {
         // Compile-time cast provides no runtime guarantee — guard against
         // malformed events where `part` is missing.
         if (!part) return;
+
+        // Track reasoning text for thinking bubbles
+        if (part.type === "reasoning" && typeof part.text === "string") {
+          this.currentReasoningText = part.text;
+        }
+
         if (!STREAM_PART_TYPES.has(part.type)) {
           return;
         }
@@ -104,9 +160,14 @@ export class StateDeriver {
         break;
       }
 
-      case "permission.asked":
+      case "permission.asked": {
+        const props = event.properties as { permission?: { title?: string } };
+        if (props.permission?.title) {
+          this.currentPermissionTitle = props.permission.title;
+        }
         this.handleEvent({ type: "PermissionPrompted" });
         break;
+      }
 
       case "permission.replied":
         this.handleEvent({ type: "PermissionResolved" });
@@ -149,8 +210,74 @@ export class StateDeriver {
     }
   }
 
+  private resolveBubbleText(state: PetState): string {
+    switch (state.mood) {
+      case "idle": {
+        const phrase = IDLE_PHRASES[this.idlePhraseIndex];
+        this.idlePhraseIndex = (this.idlePhraseIndex + 1) % IDLE_PHRASES.length;
+        return phrase!;
+      }
+      case "thinking": {
+        if (this.currentReasoningText) {
+          return this.truncateText(this.currentReasoningText, 30);
+        }
+        return "Thinking...";
+      }
+      case "working": {
+        if (this.currentToolName) {
+          return TOOL_BUBBLE_MAP[this.currentToolName] ?? "Working...";
+        }
+        return "Working...";
+      }
+      case "waiting": {
+        if (this.currentPermissionTitle) {
+          return this.truncateText(this.currentPermissionTitle, 40);
+        }
+        return "Waiting for approval...";
+      }
+      case "done": {
+        return DONE_PHRASES[Math.floor(Math.random() * DONE_PHRASES.length)]!;
+      }
+      case "error": {
+        return ERROR_PHRASES[Math.floor(Math.random() * ERROR_PHRASES.length)]!;
+      }
+    }
+  }
+
+  private truncateText(text: string, maxLength: number): string {
+    const cleaned = text.replace(/\s+/g, " ").trim();
+    if (cleaned.length <= maxLength) return cleaned;
+    return cleaned.slice(0, maxLength - 3).trim() + "...";
+  }
+
+  private getBubbleDuration(state: PetState): number | undefined {
+    if (state.temporary && state.expiresAt) {
+      return Math.max(0, state.expiresAt - Date.now());
+    }
+    return undefined;
+  }
+
+  private shouldUpdateBubbleInSameMood(
+    event: PetEvent,
+    state: PetState,
+  ): boolean {
+    if (event.type === "ToolRunning" && state.mood === "working") {
+      return true;
+    }
+    if (event.type === "StreamStarted" && state.mood === "thinking") {
+      return true;
+    }
+    if (event.type === "PermissionPrompted" && state.mood === "waiting") {
+      return true;
+    }
+    return false;
+  }
+
   private resetSessionState(): void {
     this.activeStreamParts.clear();
+    this.currentReasoningText = null;
+    this.currentToolName = null;
+    this.currentPermissionTitle = null;
   }
 
   private resetIdleTimer(): void {

@@ -81,12 +81,20 @@ document.addEventListener("DOMContentLoaded", () => {
   let isDragging = false;
   let lastX = 0;
   let lastY = 0;
+  let bubbleRestoreText: string | null = null;
+  let bubbleRestoreDuration: number = bubbleDurationMs;
 
   pet.addEventListener("mousedown", (e) => {
     isDragging = true;
     lastX = e.screenX;
     lastY = e.screenY;
     pet.classList.add("dragging");
+    // Hide bubble during drag, save state for restore
+    if (!bubble.classList.contains("bubble-hidden")) {
+      bubbleRestoreText = bubble.textContent;
+      bubbleRestoreDuration = bubbleDurationMs;
+      bubble.classList.add("bubble-hidden");
+    }
   });
 
   window.addEventListener("mousemove", (e) => {
@@ -122,6 +130,11 @@ document.addEventListener("DOMContentLoaded", () => {
       pet.classList.remove("run-left");
       pet.classList.remove("run-right");
       pet.classList.add(`state-${currentMood}`);
+      // Restore bubble if it was visible before drag
+      if (bubbleRestoreText !== null) {
+        showBubble(bubbleRestoreText, bubbleRestoreDuration);
+        bubbleRestoreText = null;
+      }
     }
   });
 });
