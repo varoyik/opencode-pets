@@ -42,6 +42,11 @@ const IDLE_PHRASES = [
 const DONE_PHRASES = ["Done!", "Task complete!", "All done!"];
 const ERROR_PHRASES = ["Oops!", "Something went wrong", "Error!"];
 
+/**
+ * Maps OpenCode tool names → friendly bubble text for the "working" state.
+ * Covers all built-in tools plus permission-only values that may appear
+ * in permission prompts (task, external_directory, doom_loop).
+ */
 const TOOL_BUBBLE_MAP: Record<string, string> = {
   bash: "Running command...",
   read: "Reading files...",
@@ -56,6 +61,9 @@ const TOOL_BUBBLE_MAP: Record<string, string> = {
   skill: "Loading skill...",
   todowrite: "Managing tasks...",
   lsp: "Getting code intelligence...",
+  task: "Running subagent...",
+  external_directory: "Accessing external files...",
+  doom_loop: "Detecting repeated action...",
 };
 
 export class StateDeriver {
@@ -83,9 +91,6 @@ export class StateDeriver {
     // Extract context from event before calling the pure reducer
     if (event.type === "ToolRunning" && event.toolName) {
       this.currentToolName = event.toolName;
-    }
-    if (event.type === "PermissionPrompted" && event.permissionTitle) {
-      this.currentPermissionTitle = event.permissionTitle;
     }
 
     const newState = reducer(this.state, event);
@@ -161,9 +166,9 @@ export class StateDeriver {
       }
 
       case "permission.asked": {
-        const props = event.properties as { permission?: { title?: string } };
-        if (props.permission?.title) {
-          this.currentPermissionTitle = props.permission.title;
+        const props = event.properties as { permission?: string };
+        if (props.permission) {
+          this.currentPermissionTitle = props.permission;
         }
         this.handleEvent({ type: "PermissionPrompted" });
         break;
@@ -219,7 +224,7 @@ export class StateDeriver {
       }
       case "thinking": {
         if (this.currentReasoningText) {
-          return this.truncateText(this.currentReasoningText, 30);
+          return this.truncateText(this.currentReasoningText, 80);
         }
         return "Thinking...";
       }
@@ -231,7 +236,10 @@ export class StateDeriver {
       }
       case "waiting": {
         if (this.currentPermissionTitle) {
-          return this.truncateText(this.currentPermissionTitle, 40);
+          const friendly =
+            TOOL_BUBBLE_MAP[this.currentPermissionTitle] ??
+            this.currentPermissionTitle;
+          return `Asking: ${friendly}`;
         }
         return "Waiting for approval...";
       }
