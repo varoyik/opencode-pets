@@ -134,22 +134,85 @@ body {
 
 #bubble {
   position: absolute;
-  bottom: 220px;
+  bottom: 216px;
   left: 50%;
   transform: translateX(-50%);
-  background: rgba(0, 0, 0, 0.75);
+  background: rgba(0, 0, 0, 0.85);
   color: white;
-  padding: 6px 12px;
-  border-radius: 12px;
+  padding: 10px 14px;
+  border-radius: 14px;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  font-size: 13px;
-  white-space: nowrap;
-  max-width: 180px;
-  text-overflow: ellipsis;
-  overflow: hidden;
+  max-width: 280px;
+  min-width: 180px;
   pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .bubble-hidden {
   display: none;
+}
+
+.bubble-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.bubble-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: white;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bubble-body {
+  font-size: 12px;
+  color: #a0a0a0;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.bubble-icon {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.icon-done svg {
+  width: 14px;
+  height: 14px;
+  color: #4ade80;
+}
+
+.icon-error svg {
+  width: 14px;
+  height: 14px;
+  color: #f87171;
 }

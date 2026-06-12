@@ -22,7 +22,7 @@ export function createWindow(): BrowserWindow {
 
   const win = new BrowserWindow({
     width: 192,
-    height: 260,
+    height: 310,
     transparent: true,
     frame: false,
     alwaysOnTop: true,

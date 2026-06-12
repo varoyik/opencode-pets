@@ -7,9 +7,26 @@ const ALL_MOODS = [
   "error",
 ] as const;
 
+const ACTIVE_MOODS = new Set(["thinking", "working", "waiting"]);
+
+const MOOD_TITLES: Record<string, string> = {
+  idle: "Idle",
+  working: "Working...",
+  thinking: "Thinking...",
+  waiting: "Waiting...",
+  done: "Done!",
+  error: "Error!",
+};
+
+const CHECKMARK_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
+const CROSS_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`;
+
 document.addEventListener("DOMContentLoaded", () => {
   const pet = document.getElementById("pet")!;
   const bubble = document.getElementById("bubble")!;
+  const bubbleTitle = bubble.querySelector(".bubble-title") as HTMLElement;
+  const bubbleBody = bubble.querySelector(".bubble-body") as HTMLElement;
+  const bubbleIcon = bubble.querySelector(".bubble-icon") as HTMLElement;
 
   if (!pet || !bubble) return;
 
@@ -22,6 +39,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   let bubbleDurationMs = 5000;
   let currentMood = "idle";
+  let bubbleManuallyHidden = false;
 
   function clearMoodClasses(): void {
     for (const m of ALL_MOODS) {
@@ -41,19 +59,41 @@ document.addEventListener("DOMContentLoaded", () => {
 
   let bubbleTimer: ReturnType<typeof setTimeout> | null = null;
 
+  function getIconHtml(mood: string): string {
+    if (ACTIVE_MOODS.has(mood)) {
+      return `<div class="spinner"></div>`;
+    }
+    if (mood === "done") {
+      return `<span class="icon-done">${CHECKMARK_SVG}</span>`;
+    }
+    if (mood === "error") {
+      return `<span class="icon-error">${CROSS_SVG}</span>`;
+    }
+    return "";
+  }
+
   function showBubble(text: string, duration: number): void {
     if (bubbleTimer !== null) {
       clearTimeout(bubbleTimer);
       bubbleTimer = null;
     }
 
-    bubble.textContent = text;
-    bubble.classList.remove("bubble-hidden");
+    const title = MOOD_TITLES[currentMood] ?? currentMood;
+    bubbleTitle.textContent = title;
+    bubbleBody.textContent = text;
+    bubbleIcon.innerHTML = getIconHtml(currentMood);
 
-    bubbleTimer = setTimeout(() => {
-      bubble.classList.add("bubble-hidden");
-      bubbleTimer = null;
-    }, duration);
+    if (!bubbleManuallyHidden) {
+      bubble.classList.remove("bubble-hidden");
+    }
+
+    // Only auto-hide for non-active moods
+    if (!ACTIVE_MOODS.has(currentMood)) {
+      bubbleTimer = setTimeout(() => {
+        bubble.classList.add("bubble-hidden");
+        bubbleTimer = null;
+      }, duration);
+    }
   }
 
   window.electronAPI.onBubble((text: string, duration: number) => {
@@ -75,7 +115,23 @@ document.addEventListener("DOMContentLoaded", () => {
   // Context menu: suppress browser default, request native menu from main
   pet.addEventListener("contextmenu", (e) => {
     e.preventDefault();
-    window.electronAPI.showContextMenu();
+    const isBubbleVisible = !bubble.classList.contains("bubble-hidden");
+    window.electronAPI.showContextMenu(isBubbleVisible);
+  });
+
+  // Toggle bubble visibility via context menu
+  window.electronAPI.onToggleBubble(() => {
+    if (bubble.classList.contains("bubble-hidden")) {
+      bubble.classList.remove("bubble-hidden");
+      bubbleManuallyHidden = false;
+    } else {
+      bubble.classList.add("bubble-hidden");
+      bubbleManuallyHidden = true;
+      if (bubbleTimer !== null) {
+        clearTimeout(bubbleTimer);
+        bubbleTimer = null;
+      }
+    }
   });
 
   let isDragging = false;
@@ -83,17 +139,25 @@ document.addEventListener("DOMContentLoaded", () => {
   let lastY = 0;
   let bubbleRestoreText: string | null = null;
   let bubbleRestoreDuration: number = bubbleDurationMs;
+  let wasManuallyHiddenBeforeDrag = false;
+  let dragStartMood = currentMood;
 
   pet.addEventListener("mousedown", (e) => {
+    if (e.button !== 0) return; // Only left-click starts drag
     isDragging = true;
     lastX = e.screenX;
     lastY = e.screenY;
+    dragStartMood = currentMood;
     pet.classList.add("dragging");
     // Hide bubble during drag, save state for restore
     if (!bubble.classList.contains("bubble-hidden")) {
-      bubbleRestoreText = bubble.textContent;
+      bubbleRestoreText = bubbleBody.textContent;
       bubbleRestoreDuration = bubbleDurationMs;
+      wasManuallyHiddenBeforeDrag = false;
       bubble.classList.add("bubble-hidden");
+    } else {
+      bubbleRestoreText = null;
+      wasManuallyHiddenBeforeDrag = bubbleManuallyHidden;
     }
   });
 
@@ -130,8 +194,12 @@ document.addEventListener("DOMContentLoaded", () => {
       pet.classList.remove("run-left");
       pet.classList.remove("run-right");
       pet.classList.add(`state-${currentMood}`);
-      // Restore bubble if it was visible before drag
-      if (bubbleRestoreText !== null) {
+      // Restore bubble if it was visible before drag and mood hasn't changed
+      if (
+        bubbleRestoreText !== null &&
+        !wasManuallyHiddenBeforeDrag &&
+        currentMood === dragStartMood
+      ) {
         showBubble(bubbleRestoreText, bubbleRestoreDuration);
         bubbleRestoreText = null;
       }

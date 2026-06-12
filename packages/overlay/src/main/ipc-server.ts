@@ -138,7 +138,7 @@ export function createSocketServer(
       });
 
       // Show native context menu on right-click from renderer
-      ipcMain.on("show-context-menu", () => {
+      ipcMain.on("show-context-menu", (_event, isBubbleVisible: boolean) => {
         const template: Electron.MenuItemConstructorOptions[] = [
           {
             label: "Switch Pet",
@@ -155,6 +155,13 @@ export function createSocketServer(
                 );
               },
             })),
+          },
+          { type: "separator" },
+          {
+            label: isBubbleVisible ? "Hide Bubble" : "Show Bubble",
+            click: () => {
+              sendToRenderer("toggle-bubble");
+            },
           },
           { type: "separator" },
           {
