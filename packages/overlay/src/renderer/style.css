@@ -60,6 +60,11 @@ body {
   animation: pet-run-left 0.6s steps(8) infinite;
 }
 
+.run-right,
+.run-left {
+  animation-fill-mode: forwards;
+}
+
 @keyframes pet-idle {
   from {
     background-position: 0 0;

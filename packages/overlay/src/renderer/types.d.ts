@@ -20,7 +20,9 @@ export interface IElectronAPI {
   onSwitchPet: (callback: (spritesheetPath: string) => void) => void;
   requestSwitchPet: (petId: string) => void;
   sendDragDelta: (dx: number, dy: number) => void;
+  sendDragEnd: (vx: number, vy: number) => void;
   showContextMenu: (isBubbleVisible: boolean) => void;
+  onThrowEnd: (callback: () => void) => void;
   onToggleBubble: (callback: () => void) => void;
 }
 

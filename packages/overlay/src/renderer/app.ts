@@ -134,19 +134,54 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
+  const VELOCITY_SMOOTHING = 0.35;
+  const THROW_MIN_SPEED = 3.0;
   let isDragging = false;
+  let isThrowing = false;
   let lastX = 0;
   let lastY = 0;
+  let smoothVelocityX = 0;
+  let smoothVelocityY = 0;
   let bubbleRestoreText: string | null = null;
   let bubbleRestoreDuration: number = bubbleDurationMs;
   let wasManuallyHiddenBeforeDrag = false;
   let dragStartMood = currentMood;
 
+  function setRunDirection(velocityX: number): void {
+    if (velocityX < 0) {
+      clearMoodClasses();
+      pet.classList.remove("run-right");
+      pet.classList.add("run-left");
+    } else {
+      clearMoodClasses();
+      pet.classList.remove("run-left");
+      pet.classList.add("run-right");
+    }
+  }
+
+  function restoreBubbleIfNeeded(): void {
+    if (
+      bubbleRestoreText !== null &&
+      !wasManuallyHiddenBeforeDrag &&
+      currentMood === dragStartMood
+    ) {
+      showBubble(bubbleRestoreText, bubbleRestoreDuration);
+      bubbleRestoreText = null;
+    }
+  }
+
   pet.addEventListener("mousedown", (e) => {
     if (e.button !== 0) return; // Only left-click starts drag
+    if (isThrowing) {
+      isThrowing = false;
+      pet.classList.remove("run-left", "run-right");
+      pet.classList.add(`state-${currentMood}`);
+    }
     isDragging = true;
     lastX = e.screenX;
     lastY = e.screenY;
+    smoothVelocityX = 0;
+    smoothVelocityY = 0;
     dragStartMood = currentMood;
     pet.classList.add("dragging");
     // Hide bubble during drag, save state for restore
@@ -163,46 +198,48 @@ document.addEventListener("DOMContentLoaded", () => {
 
   window.addEventListener("mousemove", (e) => {
     if (!isDragging) return;
-    const dx = e.screenX - lastX;
-    const dy = e.screenY - lastY;
-    const velocity = e.screenX - lastX;
+    const rawDx = e.screenX - lastX;
+    const rawDy = e.screenY - lastY;
 
-    // Directional animation based on drag velocity
-    if (velocity < -5) {
-      clearMoodClasses();
-      pet.classList.remove("run-right");
-      pet.classList.add("run-left");
-    } else if (velocity > 5) {
-      clearMoodClasses();
-      pet.classList.remove("run-left");
-      pet.classList.add("run-right");
+    smoothVelocityX =
+      smoothVelocityX * (1 - VELOCITY_SMOOTHING) + rawDx * VELOCITY_SMOOTHING;
+    smoothVelocityY =
+      smoothVelocityY * (1 - VELOCITY_SMOOTHING) + rawDy * VELOCITY_SMOOTHING;
+
+    if (Math.abs(smoothVelocityX) > 5) {
+      setRunDirection(smoothVelocityX);
     } else {
-      pet.classList.remove("run-left");
-      pet.classList.remove("run-right");
+      pet.classList.remove("run-left", "run-right");
       pet.classList.add(`state-${currentMood}`);
     }
 
     lastX = e.screenX;
     lastY = e.screenY;
-    window.electronAPI.sendDragDelta(dx, dy);
+    window.electronAPI.sendDragDelta(rawDx, rawDy);
   });
 
   window.addEventListener("mouseup", () => {
-    if (isDragging) {
-      isDragging = false;
-      pet.classList.remove("dragging");
-      pet.classList.remove("run-left");
-      pet.classList.remove("run-right");
+    if (!isDragging) return;
+    isDragging = false;
+    pet.classList.remove("dragging");
+
+    const speed = Math.hypot(smoothVelocityX, smoothVelocityY);
+    if (speed > THROW_MIN_SPEED) {
+      isThrowing = true;
+      setRunDirection(smoothVelocityX);
+      window.electronAPI.sendDragEnd(smoothVelocityX, smoothVelocityY);
+    } else {
+      pet.classList.remove("run-left", "run-right");
       pet.classList.add(`state-${currentMood}`);
-      // Restore bubble if it was visible before drag and mood hasn't changed
-      if (
-        bubbleRestoreText !== null &&
-        !wasManuallyHiddenBeforeDrag &&
-        currentMood === dragStartMood
-      ) {
-        showBubble(bubbleRestoreText, bubbleRestoreDuration);
-        bubbleRestoreText = null;
-      }
+      restoreBubbleIfNeeded();
     }
+  });
+
+  window.electronAPI.onThrowEnd(() => {
+    if (!isThrowing) return;
+    isThrowing = false;
+    pet.classList.remove("run-left", "run-right");
+    pet.classList.add(`state-${currentMood}`);
+    restoreBubbleIfNeeded();
   });
 });

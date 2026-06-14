@@ -74,6 +74,12 @@ contextBridge.exposeInMainWorld("electronAPI", {
   sendDragDelta: (dx: number, dy: number): void => {
     ipcRenderer.send("drag-delta", dx, dy);
   },
+  sendDragEnd: (vx: number, vy: number): void => {
+    ipcRenderer.send("drag-end", vx, vy);
+  },
+  onThrowEnd: (callback: () => void): void => {
+    ipcRenderer.on("throw-end", (_event: any) => callback());
+  },
   showContextMenu: (isBubbleVisible: boolean): void => {
     ipcRenderer.send("show-context-menu", isBubbleVisible);
   },
