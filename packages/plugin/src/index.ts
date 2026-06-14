@@ -130,7 +130,6 @@ const petPlugin: Plugin = async (input) => {
         ipcClient.resetQuittingState();
         ipcClient.setOverlayHidden(false);
         overlayProcess = spawnOverlay();
-        toast("Pet overlay launched", "success");
         // Send config + pets + default pet, then current mood
         ipcClient.sendConfig(config);
         ipcClient.sendPets(pets);

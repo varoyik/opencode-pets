@@ -156,7 +156,6 @@ export function createSocketServer(
               },
             })),
           },
-          { type: "separator" },
           {
             label: isBubbleVisible ? "Hide Bubble" : "Show Bubble",
             click: () => {
