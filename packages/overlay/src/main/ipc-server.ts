@@ -42,16 +42,18 @@ export function createSocketServer(
 
   function start(): Promise<void> {
     return new Promise((resolve, reject) => {
-      const dir = path.dirname(socketPath);
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
-      }
+      if (process.platform !== "win32") {
+        const dir = path.dirname(socketPath);
+        if (!fs.existsSync(dir)) {
+          fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+        }
 
-      // Remove stale socket from crashed instance (single-instance lock guarantees safety)
-      try {
-        fs.unlinkSync(socketPath);
-      } catch {
-        // ENOENT
+        // Remove stale socket from crashed instance (single-instance lock guarantees safety)
+        try {
+          fs.unlinkSync(socketPath);
+        } catch {
+          // ENOENT
+        }
       }
 
       server = net.createServer((socket) => {
@@ -194,11 +196,13 @@ export function createSocketServer(
       });
 
       server.listen(socketPath, () => {
-        try {
-          fs.chmodSync(socketPath, 0o600);
-        } catch (err) {
-          reject(err);
-          return;
+        if (process.platform !== "win32") {
+          try {
+            fs.chmodSync(socketPath, 0o600);
+          } catch (err) {
+            reject(err);
+            return;
+          }
         }
         resolve();
       });
@@ -223,10 +227,12 @@ export function createSocketServer(
       sockets.clear();
 
       server.close(() => {
-        try {
-          fs.unlinkSync(socketPath);
-        } catch {
-          // ENOENT
+        if (process.platform !== "win32") {
+          try {
+            fs.unlinkSync(socketPath);
+          } catch {
+            // ENOENT
+          }
         }
         server = null;
         resolve();

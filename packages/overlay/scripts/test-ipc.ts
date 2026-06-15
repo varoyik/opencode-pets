@@ -1,8 +1,7 @@
 import { createConnection } from "node:net";
-import { resolve } from "node:path";
+import { getSocketPath } from "@opencode-pets/core";
 
-const SOCKET_DIR = resolve(`/tmp/opencode-pets-${process.getuid?.() ?? "0"}`);
-const SOCKET_PATH = resolve(SOCKET_DIR, "opencode-pets.sock");
+const SOCKET_PATH = getSocketPath();
 
 const VALID_MOODS = [
   "idle",

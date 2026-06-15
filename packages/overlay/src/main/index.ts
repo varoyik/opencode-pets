@@ -1,8 +1,11 @@
 import { app } from "electron";
+import { getSocketPath } from "@opencode-pets/core";
 import { createWindow } from "./window.js";
 import { createSocketServer } from "./ipc-server.js";
 
-const SOCKET_PATH = `/tmp/opencode-pets-${process.getuid?.() ?? "0"}/opencode-pets.sock`;
+const SOCKET_PATH = getSocketPath();
+
+let win: ReturnType<typeof createWindow> | null = null;
 
 const gotLock = app.requestSingleInstanceLock();
 
@@ -10,13 +13,16 @@ if (!gotLock) {
   app.quit();
 } else {
   app.on("second-instance", () => {
-    // Secondary instance already quit via !gotLock above.
+    if (win) {
+      if (!win.isVisible()) win.show();
+      if (win.isMinimized()) win.restore();
+    }
   });
 
   app.dock?.hide();
 
   app.whenReady().then(async () => {
-    const win = createWindow();
+    win = createWindow();
     const server = createSocketServer(SOCKET_PATH, win);
 
     await server.start();

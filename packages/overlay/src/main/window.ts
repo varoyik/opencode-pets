@@ -1,21 +1,40 @@
 import { app, BrowserWindow, ipcMain } from "electron";
 import path from "node:path";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+  copyFileSync,
+} from "node:fs";
 import os from "node:os";
-
-const POSITION_FILE = path.join(
-  os.homedir(),
-  ".config",
-  "opencode-pets",
-  "position.json",
-);
 
 const THROW_FRICTION = 0.88;
 const THROW_STOP_THRESHOLD = 1.2;
 const THROW_FRAME_INTERVAL_MS = 16;
 
+function migrateOldPositionFile(newPath: string): void {
+  const oldPath = path.join(
+    os.homedir(),
+    ".config",
+    "opencode-pets",
+    "position.json",
+  );
+  if (existsSync(oldPath) && !existsSync(newPath)) {
+    try {
+      mkdirSync(path.dirname(newPath), { recursive: true });
+      copyFileSync(oldPath, newPath);
+    } catch {
+      // Best effort
+    }
+  }
+}
+
 export function createWindow(): BrowserWindow {
   const appPath = app.getAppPath();
+  const POSITION_FILE = path.join(app.getPath("userData"), "position.json");
+
+  migrateOldPositionFile(POSITION_FILE);
 
   const spritesheetPath = path.resolve(
     appPath,
@@ -23,6 +42,9 @@ export function createWindow(): BrowserWindow {
   );
 
   const preloadPath = path.join(appPath, "dist/preload/bridge.cjs");
+
+  const macOnly = process.platform === "darwin";
+  const winOnly = process.platform === "win32";
 
   const win = new BrowserWindow({
     width: 192,
@@ -34,6 +56,25 @@ export function createWindow(): BrowserWindow {
     skipTaskbar: true,
     hasShadow: false,
     resizable: false,
+    fullscreenable: false,
+    maximizable: false,
+    minimizable: false,
+    show: false,
+    paintWhenInitiallyHidden: true,
+    opacity: winOnly ? 0.9999999 : 1.0,
+
+    // macOS-only
+    ...(macOnly && {
+      type: "panel" as const,
+      hiddenInMissionControl: true,
+      enableLargerThanScreen: true,
+    }),
+
+    // Windows-only
+    ...(winOnly && {
+      thickFrame: false,
+    }),
+
     webPreferences: {
       preload: preloadPath,
       additionalArguments: [`--spritesheet-path=${spritesheetPath}`],
@@ -44,6 +85,21 @@ export function createWindow(): BrowserWindow {
   });
 
   win.webContents.setBackgroundThrottling(false);
+
+  if (process.platform === "win32") {
+    // "pop-up-menu" level keeps the window above the taskbar.
+    win.setAlwaysOnTop(true, "pop-up-menu");
+  }
+
+  if (macOnly) {
+    win.setVisibleOnAllWorkspaces(true, {
+      visibleOnFullScreen: true,
+      skipTransformProcessType: true,
+    });
+  } else if (process.platform !== "win32") {
+    // Linux (X11): preserve visible-on-all-workspaces behavior
+    win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  }
 
   if (existsSync(POSITION_FILE)) {
     try {
@@ -135,10 +191,10 @@ export function createWindow(): BrowserWindow {
     stopThrow();
   });
 
-  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-
   const rendererPath = path.join(appPath, "dist/renderer/index.html");
-  win.loadFile(rendererPath);
+  win.loadFile(rendererPath).then(() => {
+    win.show();
+  });
 
   return win;
 }
