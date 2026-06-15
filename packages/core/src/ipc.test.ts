@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { IpcMessageSchema, parseIpcMessage } from "./ipc.js";
+import { IpcMessageSchema, parseIpcMessage, getSocketPath } from "./ipc.js";
 import type { IpcMessage } from "./ipc.js";
 
 describe("valid messages", () => {
@@ -221,5 +221,34 @@ describe("parseIpcMessage", () => {
   it("returns null for non-object", () => {
     const result = parseIpcMessage("garbage");
     expect(result).toBeNull();
+  });
+});
+
+describe("getSocketPath", () => {
+  it("returns a string", () => {
+    const path = getSocketPath();
+    expect(typeof path).toBe("string");
+    expect(path.length).toBeGreaterThan(0);
+  });
+
+  it("contains the expected platform-specific prefix", () => {
+    const path = getSocketPath();
+    if (process.platform === "win32") {
+      expect(path).toContain("\\\\.\\pipe\\");
+    } else {
+      expect(path).toContain("/tmp/opencode-pets-");
+    }
+  });
+
+  it("ends with .sock on Unix", () => {
+    if (process.platform === "win32") return;
+    const path = getSocketPath();
+    expect(path.endsWith(".sock")).toBe(true);
+  });
+
+  it("contains opencode-pets on Windows", () => {
+    if (process.platform !== "win32") return;
+    const path = getSocketPath();
+    expect(path).toContain("opencode-pets");
   });
 });

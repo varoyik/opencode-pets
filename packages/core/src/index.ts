@@ -3,7 +3,7 @@ export type { PetMood, PetState, PetEvent } from "./states.js";
 
 export { reducer, INITIAL_STATE } from "./reducer.js";
 
-export { IpcMessageSchema, parseIpcMessage } from "./ipc.js";
+export { IpcMessageSchema, parseIpcMessage, getSocketPath } from "./ipc.js";
 export type {
   IpcMessage,
   IpcSetMoodPayload,

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { userInfo } from "node:os";
 import { ALL_MOODS } from "./states.js";
 import { PetManifestSchema } from "./pets.js";
 
@@ -90,4 +91,30 @@ export function parseIpcMessage(raw: unknown): IpcMessage | null {
     return null;
   }
   return result.data;
+}
+
+/**
+ * Return the platform-specific IPC endpoint path.
+ * - Linux / macOS: Unix domain socket under /tmp.
+ * - Windows: named pipe under \\.\pipe\.
+ */
+export function getSocketPath(): string {
+  const suffix = getSocketSuffix();
+  if (process.platform === "win32") {
+    return `\\\\.\\pipe\\opencode-pets-${suffix}`;
+  }
+  return `/tmp/opencode-pets-${suffix}/opencode-pets.sock`;
+}
+
+function getSocketSuffix(): string {
+  try {
+    if (process.platform === "win32") {
+      return userInfo()
+        .username.toLowerCase()
+        .replace(/[^a-z0-9]/g, "-");
+    }
+    return String(userInfo().uid);
+  } catch {
+    return "default";
+  }
 }
