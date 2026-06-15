@@ -5,11 +5,11 @@ import { spawnOverlay, killOverlay } from "./overlay-manager.js";
 import { StateDeriver } from "./state-deriver.js";
 import { readConfig, watchConfig } from "./config.js";
 import { scanPets } from "./pet-scanner.js";
+import { getSocketPath } from "@opencode-pets/core";
 import type { Config, LogFn } from "@opencode-pets/core";
 
 const petPlugin: Plugin = async (input) => {
-  const uid = typeof process.getuid === "function" ? process.getuid() : 1000;
-  const socketPath = `/tmp/opencode-pets-${uid}/opencode-pets.sock`;
+  const socketPath = getSocketPath();
   const client = input.client;
 
   const log: LogFn = (level, message, extra) => {

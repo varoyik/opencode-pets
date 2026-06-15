@@ -1,5 +1,7 @@
 import type { LogFn, PetMood, Config, PetManifest } from "@opencode-pets/core";
-import { parseIpcMessage } from "@opencode-pets/core";
+import { parseIpcMessage, getSocketPath } from "@opencode-pets/core";
+import { createConnection } from "node:net";
+import type { Socket as NetSocket } from "node:net";
 
 const MAX_QUEUE_SIZE = 10;
 const MAX_RETRIES = 10;
@@ -15,13 +17,10 @@ type ClientState =
   | "reconnecting"
   | "closed";
 
-function getDefaultSocketPath(): string {
-  const uid = typeof process.getuid === "function" ? process.getuid() : 1000;
-  return `/tmp/opencode-pets-${uid}/opencode-pets.sock`;
-}
-
 export class IpcClient {
-  private socket: Bun.Socket | null = null;
+  private socket: Bun.Socket | NetSocket | null = null;
+  private socketKind: "bun" | "net" | null = null;
+  private netDrainPending = false;
   private state: ClientState = "idle";
   private queue: string[] = [];
   private retryCount = 0;
@@ -47,7 +46,7 @@ export class IpcClient {
   ) {
     this.log = log;
     this.onReconnectExhausted = onReconnectExhausted;
-    this.socketPath = socketPath ?? getDefaultSocketPath();
+    this.socketPath = socketPath ?? getSocketPath();
   }
 
   private doLog(
@@ -124,10 +123,9 @@ export class IpcClient {
   }
 
   /**
-   * Send the current mood immediately if connected, or queue it if not.
-   * Unlike sendMood(), this does not append to the queue if already connected —
-   * it writes directly to the socket. Used after overlay spawn to ensure
-   * only the current mood is reflected, not stale history.
+   * Send the current mood, dropping any stale queued moods first.
+   * Used after overlay spawn to ensure only the current mood is reflected,
+   * not stale history.
    */
   sendCurrentMood(mood: PetMood): void {
     if (this.state === "closed") return;
@@ -135,20 +133,18 @@ export class IpcClient {
     this.currentMood = mood;
     const msg = this.buildMessage("set_mood", { mood });
 
-    if (this.state === "connected" && this.socket) {
-      this.socket.write(msg);
-    } else {
-      // Not connected — queue it, but first clear any stale set_mood messages
-      this.clearStaleMoodMessages();
-      if (this.queue.length >= MAX_QUEUE_SIZE) {
-        this.queue.shift();
-      }
-      this.queue.push(msg);
+    // Queue the mood and flush if connected, or connect if idle.
+    this.clearStaleMoodMessages();
+    if (this.queue.length >= MAX_QUEUE_SIZE) {
+      this.queue.shift();
+    }
+    this.queue.push(msg);
 
-      if (this.state === "idle") {
-        this.retryCount = 0;
-        this.connect();
-      }
+    if (this.state === "connected" && this.socket) {
+      this.flushQueue();
+    } else if (this.state === "idle") {
+      this.retryCount = 0;
+      this.connect();
     }
   }
 
@@ -160,6 +156,8 @@ export class IpcClient {
         // Ignore cleanup errors
       }
       this.socket = null;
+      this.socketKind = null;
+      this.netDrainPending = false;
     }
   }
 
@@ -197,11 +195,60 @@ export class IpcClient {
     if (this.state === "closed" || this.overlayQuitting) return;
     this.state = "connecting";
 
+    if (process.platform === "win32") {
+      this.connectWindows();
+    } else {
+      this.connectUnix();
+    }
+  }
+
+  private connectWindows(): void {
+    const socket = createConnection({ path: this.socketPath });
+    socket.setEncoding("utf-8");
+    this.socketKind = "net";
+
+    socket.on("connect", () => {
+      this.socket = socket;
+      this.state = "connected";
+      this.retryCount = 0;
+      this.hasConnected = true;
+      // Send handshake: config → pets → mood
+      this.sendHandshake();
+      // Clear stale mood history before flushing
+      this.clearStaleMoodMessages();
+      this.flushQueue();
+    });
+
+    socket.on("data", (data: string) => {
+      this.handleIncomingData(data);
+    });
+
+    socket.on("close", () => {
+      this.socket = null;
+      this.socketKind = null;
+      this.handleDisconnect();
+    });
+
+    socket.on("error", (err: Error) => {
+      if (this.hasConnected) {
+        this.doLog("debug", "socket error", { error: err.message });
+      }
+    });
+
+    socket.on("end", () => {
+      this.socket = null;
+      this.socketKind = null;
+      this.handleDisconnect();
+    });
+  }
+
+  private connectUnix(): void {
     Bun.connect({
       unix: this.socketPath,
       socket: {
         open: (socket) => {
           this.socket = socket;
+          this.socketKind = "bun";
           this.state = "connected";
           this.retryCount = 0;
           this.hasConnected = true;
@@ -216,6 +263,7 @@ export class IpcClient {
         },
         close: (_socket, error) => {
           this.socket = null;
+          this.socketKind = null;
           if (error && !this.overlayQuitting) {
             this.doLog("debug", "socket closed with error", {
               error: error.message,
@@ -235,6 +283,7 @@ export class IpcClient {
         },
         end: (_socket) => {
           this.socket = null;
+          this.socketKind = null;
           this.handleDisconnect();
         },
       },
@@ -267,20 +316,20 @@ export class IpcClient {
   }
 
   private sendHandshake(): void {
-    if (!this.socket) return;
+    const messages: string[] = [];
     if (this.currentConfig) {
-      this.socket.write(this.buildMessage("set_config", this.currentConfig));
+      messages.push(this.buildMessage("set_config", this.currentConfig));
     }
     if (this.currentPets) {
-      this.socket.write(
-        this.buildMessage("set_pets", { pets: this.currentPets }),
-      );
+      messages.push(this.buildMessage("set_pets", { pets: this.currentPets }));
     }
     if (this.currentMood) {
-      this.socket.write(
-        this.buildMessage("set_mood", { mood: this.currentMood }),
-      );
+      messages.push(this.buildMessage("set_mood", { mood: this.currentMood }));
     }
+
+    // Prepend handshake messages so they are sent before any queued messages.
+    this.queue.unshift(...messages);
+    this.flushQueue();
   }
 
   private handleIncomingData(data: Buffer | string): void {
@@ -367,15 +416,33 @@ export class IpcClient {
 
     while (this.queue.length > 0) {
       const data = this.queue[0]!;
-      const written = this.socket.write(data);
-      if (written < 0) {
-        break;
+
+      if (this.socketKind === "net") {
+        const socket = this.socket as NetSocket;
+        const flushed = socket.write(data);
+        if (!flushed) {
+          if (!this.netDrainPending) {
+            this.netDrainPending = true;
+            socket.once("drain", () => {
+              this.netDrainPending = false;
+              this.flushQueue();
+            });
+          }
+          return;
+        }
+        this.queue.shift();
+      } else {
+        const socket = this.socket as Bun.Socket;
+        const written = socket.write(data);
+        if (written < 0) {
+          break;
+        }
+        if (written < data.length) {
+          this.queue[0] = data.slice(written);
+          break;
+        }
+        this.queue.shift();
       }
-      if (written < data.length) {
-        this.queue[0] = data.slice(written);
-        break;
-      }
-      this.queue.shift();
     }
   }
 
