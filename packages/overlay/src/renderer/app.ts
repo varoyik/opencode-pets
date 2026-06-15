@@ -170,12 +170,16 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  function stopRunAnimation(): void {
+    pet.classList.remove("run-left", "run-right");
+    pet.classList.add(`state-${currentMood}`);
+  }
+
   pet.addEventListener("mousedown", (e) => {
     if (e.button !== 0) return; // Only left-click starts drag
     if (isThrowing) {
       isThrowing = false;
-      pet.classList.remove("run-left", "run-right");
-      pet.classList.add(`state-${currentMood}`);
+      stopRunAnimation();
     }
     isDragging = true;
     lastX = e.screenX;
@@ -209,8 +213,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (Math.abs(smoothVelocityX) > 5) {
       setRunDirection(smoothVelocityX);
     } else {
-      pet.classList.remove("run-left", "run-right");
-      pet.classList.add(`state-${currentMood}`);
+      stopRunAnimation();
     }
 
     lastX = e.screenX;
@@ -229,8 +232,7 @@ document.addEventListener("DOMContentLoaded", () => {
       setRunDirection(smoothVelocityX);
       window.electronAPI.sendDragEnd(smoothVelocityX, smoothVelocityY);
     } else {
-      pet.classList.remove("run-left", "run-right");
-      pet.classList.add(`state-${currentMood}`);
+      stopRunAnimation();
       restoreBubbleIfNeeded();
     }
   });
@@ -238,8 +240,7 @@ document.addEventListener("DOMContentLoaded", () => {
   window.electronAPI.onThrowEnd(() => {
     if (!isThrowing) return;
     isThrowing = false;
-    pet.classList.remove("run-left", "run-right");
-    pet.classList.add(`state-${currentMood}`);
+    stopRunAnimation();
     restoreBubbleIfNeeded();
   });
 });

@@ -163,15 +163,17 @@ export class IpcClient {
 
   close(): void {
     this.state = "closed";
+    this.overlayHidden = false;
+    this.resetState();
+  }
+
+  private resetState(): void {
     this.queue = [];
     this.incomingBuffer = "";
-    this.overlayHidden = false;
-
     if (this.backoffTimer !== null) {
       clearTimeout(this.backoffTimer);
       this.backoffTimer = null;
     }
-
     this.cleanupSocket();
   }
 
@@ -202,21 +204,27 @@ export class IpcClient {
     }
   }
 
+  private onConnected(
+    socket: Bun.Socket | NetSocket,
+    kind: "bun" | "net",
+  ): void {
+    this.socket = socket;
+    this.socketKind = kind;
+    this.state = "connected";
+    this.retryCount = 0;
+    this.hasConnected = true;
+    this.sendHandshake();
+    this.clearStaleMoodMessages();
+    this.flushQueue();
+  }
+
   private connectWindows(): void {
     const socket = createConnection({ path: this.socketPath });
     socket.setEncoding("utf-8");
     this.socketKind = "net";
 
     socket.on("connect", () => {
-      this.socket = socket;
-      this.state = "connected";
-      this.retryCount = 0;
-      this.hasConnected = true;
-      // Send handshake: config → pets → mood
-      this.sendHandshake();
-      // Clear stale mood history before flushing
-      this.clearStaleMoodMessages();
-      this.flushQueue();
+      this.onConnected(socket, "net");
     });
 
     socket.on("data", (data: string) => {
@@ -247,16 +255,7 @@ export class IpcClient {
       unix: this.socketPath,
       socket: {
         open: (socket) => {
-          this.socket = socket;
-          this.socketKind = "bun";
-          this.state = "connected";
-          this.retryCount = 0;
-          this.hasConnected = true;
-          // Send handshake: config → pets → mood
-          this.sendHandshake();
-          // Clear stale mood history before flushing
-          this.clearStaleMoodMessages();
-          this.flushQueue();
+          this.onConnected(socket, "bun");
         },
         data: (_socket, data: Buffer | string) => {
           this.handleIncomingData(data);
@@ -360,18 +359,9 @@ export class IpcClient {
         this.onSwitchPetCallback(msg.payload.petId);
       } else if (msg.type === "quit_pet") {
         this.overlayQuitting = true;
-        if (this.onQuitPetCallback) {
-          this.onQuitPetCallback();
-        }
-        // End the socket gracefully but keep client alive for potential respawn.
-        this.cleanupSocket();
+        this.onQuitPetCallback?.();
         this.state = "idle";
-        this.queue = [];
-        this.incomingBuffer = "";
-        if (this.backoffTimer !== null) {
-          clearTimeout(this.backoffTimer);
-          this.backoffTimer = null;
-        }
+        this.resetState();
       } else if (msg.type === "hidden") {
         this.overlayHidden = true;
         if (this.onHiddenCallback) {

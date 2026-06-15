@@ -175,6 +175,9 @@ export function createWindow(): BrowserWindow {
     } catch {
       // Corrupt position file — ignore and use default position
     }
+  } else {
+    const [defaultX, defaultY] = getDefaultWindowPosition(workArea);
+    win.setPosition(defaultX, defaultY);
   }
 
   function savePositionSoon(): void {
@@ -248,7 +251,10 @@ export function createWindow(): BrowserWindow {
   ipcMain.on("drag-delta", (_event, dx: number, dy: number) => {
     stopThrow();
     const pos = win.getPosition() as [number, number];
-    win.setPosition(pos[0] + dx, pos[1] + dy);
+    const wa = getPrimaryWorkArea();
+    const b = getWindowBoundsForPet(wa);
+    const [cx, cy] = clampWindowPosition(pos[0] + dx, pos[1] + dy, b);
+    win.setPosition(cx, cy);
     savePositionSoon();
   });
 

@@ -269,16 +269,16 @@ export class StateDeriver {
     event: PetEvent,
     state: PetState,
   ): boolean {
-    if (event.type === "ToolRunning" && state.mood === "working") {
-      return true;
+    switch (event.type) {
+      case "ToolRunning":
+        return state.mood === "working";
+      case "StreamStarted":
+        return state.mood === "thinking";
+      case "PermissionPrompted":
+        return state.mood === "waiting";
+      default:
+        return false;
     }
-    if (event.type === "StreamStarted" && state.mood === "thinking") {
-      return true;
-    }
-    if (event.type === "PermissionPrompted" && state.mood === "waiting") {
-      return true;
-    }
-    return false;
   }
 
   private resetSessionState(): void {
