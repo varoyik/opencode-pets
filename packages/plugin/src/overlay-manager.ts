@@ -22,7 +22,22 @@ export function spawnOverlay(): Subprocess {
         )
       : path.join(overlayPath, "node_modules", ".bin", "electron");
 
-  return Bun.spawn([electronBin, "."], { cwd: overlayPath, stderr: "ignore" });
+  const args = ["."];
+
+  // Native Wayland won't let us self-position or stay on top. Must force X11
+  // on the process argv — app.commandLine.appendSwitch is too late for the
+  // main process. Works on Hyprland, Sway, river, etc.
+  if (
+    process.platform === "linux" &&
+    process.env["XDG_SESSION_TYPE"] === "wayland"
+  ) {
+    args.unshift("--ozone-platform=x11");
+  }
+
+  return Bun.spawn([electronBin, ...args], {
+    cwd: overlayPath,
+    stderr: "ignore",
+  });
 }
 
 export async function healthCheck(socketPath: string): Promise<boolean> {

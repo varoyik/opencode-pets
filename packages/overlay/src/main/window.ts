@@ -103,6 +103,7 @@ export function createWindow(): BrowserWindow {
     minimizable: false,
     show: false,
     paintWhenInitiallyHidden: true,
+    backgroundColor: "#00000000",
     opacity: winOnly ? 0.9999999 : 1.0,
 
     // macOS-only
@@ -126,6 +127,7 @@ export function createWindow(): BrowserWindow {
     },
   });
 
+  win.setTitle("OpenCode Pets");
   win.webContents.setBackgroundThrottling(false);
 
   if (process.platform === "win32") {
@@ -133,15 +135,18 @@ export function createWindow(): BrowserWindow {
     win.setAlwaysOnTop(true, "pop-up-menu");
   }
 
-  if (macOnly) {
-    win.setVisibleOnAllWorkspaces(true, {
-      visibleOnFullScreen: true,
-      skipTransformProcessType: true,
-    });
-  } else if (process.platform !== "win32") {
-    // Linux (X11): preserve visible-on-all-workspaces behavior
-    win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-  }
+  win.once("ready-to-show", () => {
+    win.show();
+    if (macOnly) {
+      win.setVisibleOnAllWorkspaces(true, {
+        visibleOnFullScreen: true,
+        skipTransformProcessType: true,
+      });
+    } else if (process.platform !== "win32") {
+      // Linux (X11/XWayland): preserve visible-on-all-workspaces behavior
+      win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    }
+  });
 
   let writeTimer: ReturnType<typeof setTimeout> | null = null;
   let throwVelocityX = 0;
@@ -305,9 +310,7 @@ export function createWindow(): BrowserWindow {
   });
 
   const rendererPath = path.join(appPath, "dist/renderer/index.html");
-  win.loadFile(rendererPath).then(() => {
-    win.show();
-  });
+  win.loadFile(rendererPath);
 
   return win;
 }

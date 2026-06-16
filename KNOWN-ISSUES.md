@@ -98,6 +98,12 @@ socket connections, even when the client is write-only.
 
 ---
 
+## Hyprland / wlroots Wayland compatibility
+
+See [docs/hyprland.md](./docs/hyprland.md) for window rules and setup. The overlay forces XWayland automatically on Linux Wayland sessions by injecting `--ozone-platform=x11` from the plugin spawn path.
+
+---
+
 ## Architectural Note: `~/.opencode-pets/overlay/` deployment model
 
 All deployment-related bugs (C, D, E, F) are now fixed. The loose-files approach
