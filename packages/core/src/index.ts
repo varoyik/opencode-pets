@@ -19,11 +19,13 @@ export type {
 export { PetManifestSchema } from "./pets.js";
 export type { PetManifest } from "./pets.js";
 
-export { ConfigSchema, getConfigDir, DEFAULT_CONFIG } from "./config.js";
-export type { Config } from "./config.js";
-
-export type LogFn = (
-  level: "debug" | "info" | "warn" | "error",
-  message: string,
-  extra?: Record<string, unknown>,
-) => void;
+export {
+  ConfigSchema,
+  getConfigPath,
+  getOpenCodeConfigDir,
+  DEFAULT_CONFIG,
+  readConfig,
+  writeConfig,
+  watchConfig,
+} from "./config.js";
+export type { Config, Position, LogFn } from "./config.js";

@@ -1,7 +1,7 @@
 import { app, BrowserWindow, ipcMain, screen } from "electron";
 import path from "node:path";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { getConfigDir } from "@opencode-pets/core";
+import { readConfig, writeConfig } from "@opencode-pets/core";
+import type { Config } from "@opencode-pets/core";
 
 const THROW_FRICTION = 0.88;
 const THROW_STOP_THRESHOLD = 1.2;
@@ -108,7 +108,6 @@ function safeSetPosition(
 
 export function createWindow(): BrowserWindow {
   const appPath = app.getAppPath();
-  const POSITION_FILE = path.join(getConfigDir(), "position.json");
 
   const spritesheetPath = path.resolve(
     appPath,
@@ -188,29 +187,29 @@ export function createWindow(): BrowserWindow {
   const workArea = getPrimaryWorkArea();
   const bounds = getWindowBoundsForPet(workArea);
 
-  if (existsSync(POSITION_FILE)) {
-    try {
-      const pos = JSON.parse(readFileSync(POSITION_FILE, "utf-8"));
-      if (typeof pos.x === "number" && typeof pos.y === "number") {
-        if (isPetCompletelyOffScreen(pos.x, pos.y, workArea)) {
-          // Saved position is on a disconnected display — reset to default.
-          const [defaultX, defaultY] = getDefaultWindowPosition(workArea);
-          safeSetPosition(win, defaultX, defaultY);
-          savePositionSoon();
-        } else {
-          const [clampedX, clampedY] = clampWindowPosition(
-            pos.x,
-            pos.y,
-            bounds,
-          );
-          safeSetPosition(win, clampedX, clampedY);
-          if (clampedX !== pos.x || clampedY !== pos.y) {
-            savePositionSoon();
-          }
-        }
+  const config = readConfig();
+  const savedPosition = config.position;
+
+  if (
+    savedPosition &&
+    typeof savedPosition.x === "number" &&
+    typeof savedPosition.y === "number"
+  ) {
+    if (isPetCompletelyOffScreen(savedPosition.x, savedPosition.y, workArea)) {
+      // Saved position is on a disconnected display — reset to default.
+      const [defaultX, defaultY] = getDefaultWindowPosition(workArea);
+      safeSetPosition(win, defaultX, defaultY);
+      savePositionSoon();
+    } else {
+      const [clampedX, clampedY] = clampWindowPosition(
+        savedPosition.x,
+        savedPosition.y,
+        bounds,
+      );
+      safeSetPosition(win, clampedX, clampedY);
+      if (clampedX !== savedPosition.x || clampedY !== savedPosition.y) {
+        savePositionSoon();
       }
-    } catch {
-      // Corrupt position file — ignore and use default position
     }
   } else {
     const [defaultX, defaultY] = getDefaultWindowPosition(workArea);
@@ -224,13 +223,14 @@ export function createWindow(): BrowserWindow {
     writeTimer = setTimeout(() => {
       const newPos = win.getPosition() as [number, number];
       try {
-        mkdirSync(path.dirname(POSITION_FILE), { recursive: true });
-        writeFileSync(
-          POSITION_FILE,
-          JSON.stringify({ x: newPos[0], y: newPos[1] }),
-        );
+        const currentConfig = readConfig();
+        const updatedConfig: Config = {
+          ...currentConfig,
+          position: { x: newPos[0], y: newPos[1] },
+        };
+        writeConfig(updatedConfig);
       } catch {
-        // Best-effort: don't crash if we can't write the position file
+        // Best-effort: don't crash if we can't write the config file
       }
       writeTimer = null;
     }, 300);

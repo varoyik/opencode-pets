@@ -2,6 +2,7 @@ import { z } from "zod";
 import { userInfo } from "node:os";
 import { ALL_MOODS } from "./states.js";
 import { PetManifestSchema } from "./pets.js";
+import { PositionSchema } from "./config.js";
 
 const setMoodPayload = z.object({
   mood: z.enum(ALL_MOODS),
@@ -18,6 +19,7 @@ const setConfigPayload = z.object({
   defaultPet: z.string(),
   idleTimeoutMs: z.number().positive(),
   bubbleDurationMs: z.number().positive(),
+  position: PositionSchema.optional(),
 });
 
 const setPetsPayload = z.object({
