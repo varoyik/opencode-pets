@@ -74,6 +74,38 @@ function getDefaultWindowPosition(
   ];
 }
 
+const INT32_MIN = -0x80000000; // -2,147,483,648
+const INT32_MAX = 0x7fffffff; // 2,147,483,647
+
+/**
+ * Set window position with crash-proof guards.
+ * - Clamps to int32 range, which is what Electron/Chromium uses internally.
+ * - Wraps the Electron call in try-catch as a final safety net — Electron's
+ *   native layer can reject certain edge-case coordinate values on X11 even
+ *   when `Number.isFinite` and int32 clamping pass.
+ * - This is defense-in-depth: guards co-located with the call cannot be bypassed.
+ */
+function safeSetPosition(
+  win: BrowserWindow,
+  x: number | undefined,
+  y: number | undefined,
+): void {
+  let rx = Math.round(x as number);
+  let ry = Math.round(y as number);
+  if (!Number.isFinite(rx) || !Number.isFinite(ry)) {
+    return;
+  }
+  // Electron's setPosition uses C++ int (int32) coordinates.
+  rx = Math.max(INT32_MIN, Math.min(INT32_MAX, rx));
+  ry = Math.max(INT32_MIN, Math.min(INT32_MAX, ry));
+  try {
+    win.setPosition(rx, ry);
+  } catch {
+    // Silently skip — Electron can reject edge-case coordinate values on
+    // some platforms. The next throw frame reads getPosition() and continues.
+  }
+}
+
 export function createWindow(): BrowserWindow {
   const appPath = app.getAppPath();
   const POSITION_FILE = path.join(getConfigDir(), "position.json");
@@ -163,7 +195,7 @@ export function createWindow(): BrowserWindow {
         if (isPetCompletelyOffScreen(pos.x, pos.y, workArea)) {
           // Saved position is on a disconnected display — reset to default.
           const [defaultX, defaultY] = getDefaultWindowPosition(workArea);
-          win.setPosition(defaultX, defaultY);
+          safeSetPosition(win, defaultX, defaultY);
           savePositionSoon();
         } else {
           const [clampedX, clampedY] = clampWindowPosition(
@@ -171,7 +203,7 @@ export function createWindow(): BrowserWindow {
             pos.y,
             bounds,
           );
-          win.setPosition(clampedX, clampedY);
+          safeSetPosition(win, clampedX, clampedY);
           if (clampedX !== pos.x || clampedY !== pos.y) {
             savePositionSoon();
           }
@@ -182,7 +214,7 @@ export function createWindow(): BrowserWindow {
     }
   } else {
     const [defaultX, defaultY] = getDefaultWindowPosition(workArea);
-    win.setPosition(defaultX, defaultY);
+    safeSetPosition(win, defaultX, defaultY);
   }
 
   function savePositionSoon(): void {
@@ -239,7 +271,13 @@ export function createWindow(): BrowserWindow {
         throwVelocityY = -throwVelocityY * BOUNCE_RESTITUTION;
       }
 
-      win.setPosition(Math.round(nextX), Math.round(nextY));
+      if (!Number.isFinite(nextX) || !Number.isFinite(nextY)) {
+        stopThrow();
+        win.webContents.send("throw-end");
+        return;
+      }
+
+      safeSetPosition(win, nextX, nextY);
 
       savePositionSoon();
 
@@ -255,16 +293,23 @@ export function createWindow(): BrowserWindow {
 
   ipcMain.on("drag-delta", (_event, dx: number, dy: number) => {
     stopThrow();
+    if (!Number.isFinite(dx) || !Number.isFinite(dy)) {
+      return;
+    }
     const pos = win.getPosition() as [number, number];
     const wa = getPrimaryWorkArea();
     const b = getWindowBoundsForPet(wa);
     const [cx, cy] = clampWindowPosition(pos[0] + dx, pos[1] + dy, b);
-    win.setPosition(cx, cy);
+    safeSetPosition(win, cx, cy);
     savePositionSoon();
   });
 
   ipcMain.on("drag-end", (_event, vx: number, vy: number) => {
     stopThrow();
+    if (!Number.isFinite(vx) || !Number.isFinite(vy)) {
+      win.webContents.send("throw-end");
+      return;
+    }
     throwVelocityX = vx;
     throwVelocityY = vy;
     const speed = Math.hypot(vx, vy);
@@ -278,15 +323,22 @@ export function createWindow(): BrowserWindow {
   function constrainWindowToScreen(): void {
     if (win.isDestroyed() || !win.isVisible()) return;
     const pos = win.getPosition() as [number, number];
+    if (!Number.isFinite(pos[0]) || !Number.isFinite(pos[1])) {
+      const [defaultX, defaultY] =
+        getDefaultWindowPosition(getPrimaryWorkArea());
+      safeSetPosition(win, defaultX, defaultY);
+      savePositionSoon();
+      return;
+    }
     const wa = getPrimaryWorkArea();
     if (isPetCompletelyOffScreen(pos[0], pos[1], wa)) {
       const [defaultX, defaultY] = getDefaultWindowPosition(wa);
-      win.setPosition(defaultX, defaultY);
+      safeSetPosition(win, defaultX, defaultY);
     } else {
       const b = getWindowBoundsForPet(wa);
       const [cx, cy] = clampWindowPosition(pos[0], pos[1], b);
       if (cx !== pos[0] || cy !== pos[1]) {
-        win.setPosition(cx, cy);
+        safeSetPosition(win, cx, cy);
       }
     }
     savePositionSoon();
