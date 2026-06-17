@@ -9,6 +9,7 @@ const INITIAL_BACKOFF_MS = 100;
 const MAX_BACKOFF_MS = 2000;
 
 const SET_MOOD_PREFIX = '{"type":"set_mood"';
+const SHOW_BUBBLE_PREFIX = '{"type":"show_bubble"';
 
 type ClientState =
   | "idle"
@@ -30,6 +31,7 @@ export class IpcClient {
   private currentConfig: Config | null = null;
   private currentPets: PetManifest[] | null = null;
   private currentMood: PetMood | null = null;
+  private initialMood: PetMood | null = null;
   private onSwitchPetCallback: ((petId: string) => void) | null = null;
   private onQuitPetCallback: (() => void) | null = null;
   private onHiddenCallback: (() => void) | null = null;
@@ -125,12 +127,15 @@ export class IpcClient {
   /**
    * Send the current mood, dropping any stale queued moods first.
    * Used after overlay spawn to ensure only the current mood is reflected,
-   * not stale history.
+   * not stale history. Also stores the mood as the initial mood for the
+   * next handshake, so the overlay always starts with this mood regardless
+   * of SSE events that arrive between spawn and connection.
    */
   sendCurrentMood(mood: PetMood): void {
     if (this.state === "closed") return;
 
     this.currentMood = mood;
+    this.initialMood = mood;
     const msg = this.buildMessage("set_mood", { mood });
 
     // Queue the mood and flush if connected, or connect if idle.
@@ -213,8 +218,8 @@ export class IpcClient {
     this.state = "connected";
     this.retryCount = 0;
     this.hasConnected = true;
+    this.clearStaleStateMessages();
     this.sendHandshake();
-    this.clearStaleMoodMessages();
     this.flushQueue();
   }
 
@@ -286,23 +291,14 @@ export class IpcClient {
           this.handleDisconnect();
         },
       },
-    })
-      .then(() => {
-        if (this.state === "connecting") {
-          this.state = "connected";
-          this.retryCount = 0;
-          this.clearStaleMoodMessages();
-          this.flushQueue();
-        }
-      })
-      .catch(() => {
-        if (this.overlayQuitting) {
-          this.state = "idle";
-        } else if (this.state === "connecting") {
-          this.state = "reconnecting";
-          this.scheduleReconnect();
-        }
-      });
+    }).catch(() => {
+      if (this.overlayQuitting) {
+        this.state = "idle";
+      } else if (this.state === "connecting") {
+        this.state = "reconnecting";
+        this.scheduleReconnect();
+      }
+    });
   }
 
   private handleDisconnect(): void {
@@ -322,9 +318,11 @@ export class IpcClient {
     if (this.currentPets) {
       messages.push(this.buildMessage("set_pets", { pets: this.currentPets }));
     }
-    if (this.currentMood) {
-      messages.push(this.buildMessage("set_mood", { mood: this.currentMood }));
+    const moodToSend = this.initialMood ?? this.currentMood;
+    if (moodToSend) {
+      messages.push(this.buildMessage("set_mood", { mood: moodToSend }));
     }
+    this.initialMood = null;
 
     // Prepend handshake messages so they are sent before any queued messages.
     this.queue.unshift(...messages);
@@ -436,6 +434,16 @@ export class IpcClient {
     }
   }
 
+  private clearMessagesByPrefix(...prefixes: string[]): void {
+    if (prefixes.length === 1) {
+      this.queue = this.queue.filter((msg) => !msg.startsWith(prefixes[0]!));
+      return;
+    }
+    this.queue = this.queue.filter(
+      (msg) => !prefixes.some((p) => msg.startsWith(p)),
+    );
+  }
+
   /**
    * Remove all queued set_mood messages except the latest one.
    * Prevents stale mood replay when the overlay reconnects.
@@ -457,5 +465,15 @@ export class IpcClient {
     this.queue = this.queue.filter(
       (msg, idx) => !msg.startsWith(SET_MOOD_PREFIX) || idx === lastMoodIndex,
     );
+  }
+
+  /**
+   * Remove ALL queued set_mood and show_bubble messages.
+   * Used before the handshake so stale state changes from SSE events
+   * that arrived between spawn and connection don't override the
+   * initial mood or show a stale bubble.
+   */
+  private clearStaleStateMessages(): void {
+    this.clearMessagesByPrefix(SET_MOOD_PREFIX, SHOW_BUBBLE_PREFIX);
   }
 }

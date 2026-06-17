@@ -130,11 +130,12 @@ const petPlugin: Plugin = async (input) => {
         ipcClient.resetQuittingState();
         ipcClient.setOverlayHidden(false);
         overlayProcess = spawnOverlay();
-        // Send config + pets + default pet, then current mood
+        // Reset state deriver so stale pre-spawn counters don't leak
+        stateDeriver.reset();
         ipcClient.sendConfig(config);
         ipcClient.sendPets(pets);
         switchToDefaultPet(config.defaultPet);
-        ipcClient.sendCurrentMood(stateDeriver.getCurrentMood());
+        ipcClient.sendCurrentMood("idle");
         message = "Pet overlay launched.";
 
         // Start config watcher after first spawn

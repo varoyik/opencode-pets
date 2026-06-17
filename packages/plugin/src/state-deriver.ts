@@ -202,6 +202,19 @@ export class StateDeriver {
     return this.state.mood;
   }
 
+  /**
+   * Reset all state to initial — called when the overlay is spawned
+   * so stale counters from pre-spawn SSE events don't leak into the
+   * fresh pet session.
+   */
+  reset(): void {
+    this.dispose();
+    this.state = { ...INITIAL_STATE };
+    this.currentBubbleText = null;
+    this.idlePhraseIndex = 0;
+    this.resetIdleTimer();
+  }
+
   dispose(): void {
     this.resetSessionState();
     this.hasError = false;
