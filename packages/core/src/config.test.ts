@@ -81,7 +81,7 @@ describe("config read/write", () => {
     expect(config).toEqual(DEFAULT_CONFIG);
     expect(existsSync(getConfigPath())).toBe(true);
     const raw = JSON.parse(readFileSync(getConfigPath(), "utf-8"));
-    expect(raw.defaultPet).toBe("claude-crab");
+    expect(raw.defaultPet).toBe("gutsy");
     expect(raw.position).toBeUndefined();
   });
 

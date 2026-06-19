@@ -157,8 +157,6 @@ const petPlugin: Plugin = async (input) => {
       }
 
       // Inject noReply message (chat entry, no LLM trigger).
-      // Throw __PET_HANDLED__ to abort command flow — prevents LLM
-      // from processing /pet.
       await client.session.prompt({
         path: { id: cmdInput.sessionID },
         body: {
@@ -174,6 +172,23 @@ const petPlugin: Plugin = async (input) => {
       });
 
       throw new Error("__PET_HANDLED__");
+
+      // OpenCode 1.17.6+ catches hook errors and displays them. Opening a
+      // dialog overlays the error; when the user closes it (Esc), the session
+      // re-renders and the transient error disappears because it was never
+      // stored in session state.
+
+      // await client.tui.openHelp().catch(() => {});
+
+      // Throw a minimized error: no stack trace removes the ~8-line code
+      // frame, and AbortError is a standard name many renderers handle
+      // gracefully. Throwing is still the only way to stop the LLM from
+      // processing /pet — there is no output.handled flag (see #25916).
+
+      // const err = new Error("__PET_HANDLED__");
+      // err.name = "AbortError";
+      // (err as any).stack = undefined;
+      // throw err;
     },
   };
 };

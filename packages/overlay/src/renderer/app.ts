@@ -133,8 +133,11 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
-  // Close context menu on any left-click on the pet
-  pet.addEventListener("mousedown", () => {
+  // Close context menu on any mousedown on the pet window (catches
+  // clicks on the pet element, bubble, and transparent areas). The
+  // menu is focusable: false, so it cannot detect outside clicks via
+  // blur — this IPC is the mechanism for that.
+  document.addEventListener("mousedown", () => {
     window.electronAPI.closeContextMenu();
   });
 

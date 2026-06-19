@@ -111,7 +111,7 @@ export function createWindow(): BrowserWindow {
 
   const spritesheetPath = path.resolve(
     appPath,
-    "assets/pets/claude-crab/spritesheet.webp",
+    "assets/pets/gutsy/spritesheet.webp",
   );
 
   const preloadPath = path.join(appPath, "dist/preload/bridge.cjs");

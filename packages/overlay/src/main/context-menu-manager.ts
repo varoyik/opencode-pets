@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, screen } from "electron";
+import { app, BrowserWindow, globalShortcut, ipcMain, screen } from "electron";
 import path from "node:path";
 
 interface PetManifest {
@@ -67,7 +67,7 @@ export class ContextMenuManager {
       transparent: true,
       frame: false,
       hasShadow: false,
-      focusable: true,
+      focusable: false,
       skipTaskbar: true,
       resizable: false,
       fullscreenable: false,
@@ -189,28 +189,15 @@ export class ContextMenuManager {
       },
     );
 
-    this.menuWindow.on("blur", () => {
-      this.close();
-    });
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    this.menuWindow.on("focus", () => {
-      // Only register once
-      if (!this.menuWindow) return;
-      this.menuWindow.webContents.focus();
-    });
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    this.menuWindow.webContents.on(
-      "before-input-event",
-      (_event: any, input: any) => {
-        if (input.key === "Escape" && input.type === "keyDown") {
-          if (this.menuWindow && !this.menuWindow.isDestroyed()) {
-            this.menuWindow.webContents.send("menu-escape");
-          }
-        }
-      },
-    );
+    // Register Escape via globalShortcut — the menu window is
+    // focusable: false so it cannot receive keyboard events through
+    // normal Electron channels (before-input-event, keydown, etc.).
+    // globalShortcut works on X11 and XWayland; we register it only
+    // while the menu is visible and unregister on close.
+    if (!globalShortcut.register("Escape", () => this.close())) {
+      // Registration can fail if another app holds the grab — menu
+      // will simply not close on Escape, which is acceptable.
+    }
 
     this.menuWindow.on("closed", () => {
       this.cleanup();
@@ -234,6 +221,9 @@ export class ContextMenuManager {
   }
 
   private cleanup(): void {
+    if (globalShortcut.isRegistered("Escape")) {
+      globalShortcut.unregister("Escape");
+    }
     this.menuWindow = null;
     this.initialWidth = 0;
     ipcMain.removeAllListeners("menu-ready");
