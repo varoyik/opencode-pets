@@ -1,0 +1,111 @@
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  overflow: hidden;
+  background: transparent;
+}
+
+.menu-container {
+  display: flex;
+  flex-direction: row;
+  gap: 6px;
+  align-items: flex-start;
+}
+
+.context-menu-panel,
+.context-submenu {
+  background: rgba(0, 0, 0, 0.85);
+  border-radius: 14px;
+  padding: 6px;
+  min-width: 150px;
+  color: white;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 13px;
+  line-height: 1.3;
+  user-select: none;
+  -webkit-user-select: none;
+  pointer-events: auto;
+}
+
+.context-submenu {
+  min-width: 170px;
+  display: none;
+}
+
+.context-submenu.submenu-open {
+  display: block;
+}
+
+.context-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  cursor: default;
+  white-space: nowrap;
+}
+
+.context-menu-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.context-menu-item.active {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.context-menu-item .item-icon {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.context-menu-item .item-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.context-menu-item .item-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.context-menu-item .item-chevron {
+  flex-shrink: 0;
+  width: 12px;
+  height: 12px;
+  opacity: 0.6;
+}
+
+.context-menu-item .item-chevron svg {
+  width: 12px;
+  height: 12px;
+}
+
+.context-menu-separator {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.15);
+  margin: 4px 6px;
+}
+
+.pet-icon {
+  flex-shrink: 0;
+  width: 24px;
+  height: 26px;
+  background-size: 192px 208px;
+  background-position: center center;
+  background-repeat: no-repeat;
+  image-rendering: pixelated;
+  border-radius: 4px;
+}
