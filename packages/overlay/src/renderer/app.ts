@@ -21,6 +21,13 @@ const MOOD_TITLES: Record<string, string> = {
 const CHECKMARK_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
 const CROSS_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`;
 
+interface PetManifest {
+  id: string;
+  displayName: string;
+  description?: string;
+  spritesheetPath: string;
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   const pet = document.getElementById("pet")!;
   const bubble = document.getElementById("bubble")!;
@@ -40,6 +47,9 @@ document.addEventListener("DOMContentLoaded", () => {
   let bubbleDurationMs = 5000;
   let currentMood = "idle";
   let bubbleManuallyHidden = false;
+
+  let currentPetId = "";
+  let petList: PetManifest[] = [];
 
   function clearMoodClasses(): void {
     for (const m of ALL_MOODS) {
@@ -104,22 +114,31 @@ document.addEventListener("DOMContentLoaded", () => {
     bubbleDurationMs = config.bubbleDurationMs;
   });
 
-  window.electronAPI.onPetsChanged((_newPets) => {
-    // Reserved for future pet selector UI.
+  window.electronAPI.onPetsChanged((newPets: PetManifest[]) => {
+    petList = newPets;
   });
 
-  window.electronAPI.onSwitchPet((spritesheetPath: string) => {
+  window.electronAPI.onSwitchPet((petId: string, spritesheetPath: string) => {
+    currentPetId = petId;
     pet.style.backgroundImage = `url(file://${spritesheetPath})`;
   });
 
-  // Context menu: suppress browser default, request native menu from main
+  // Context menu via separate BrowserWindow
   pet.addEventListener("contextmenu", (e) => {
     e.preventDefault();
-    const isBubbleVisible = !bubble.classList.contains("bubble-hidden");
-    window.electronAPI.showContextMenu(isBubbleVisible);
+    window.electronAPI.openContextMenu({
+      bubbleVisible: !bubble.classList.contains("bubble-hidden"),
+      currentPetId,
+      pets: petList,
+    });
   });
 
-  // Toggle bubble visibility via context menu
+  // Close context menu on any left-click on the pet
+  pet.addEventListener("mousedown", () => {
+    window.electronAPI.closeContextMenu();
+  });
+
+  // Toggle bubble visibility via IPC from menu window or plugin
   window.electronAPI.onToggleBubble(() => {
     if (bubble.classList.contains("bubble-hidden")) {
       bubble.classList.remove("bubble-hidden");

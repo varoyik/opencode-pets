@@ -1,12 +1,8 @@
 import net from "node:net";
 import fs from "node:fs";
 import path from "node:path";
-import { ipcMain, type BrowserWindow, Menu, app } from "electron";
+import { ipcMain, type BrowserWindow, app } from "electron";
 import { parseIpcMessage } from "@opencode-pets/core";
-import type { PetManifest } from "@opencode-pets/core";
-
-let petList: PetManifest[] = [];
-let currentPetId = "";
 
 export interface SocketServer {
   start(): Promise<void>;
@@ -113,15 +109,15 @@ export function createSocketServer(
                 break;
 
               case "set_pets":
-                petList = msg.payload.pets;
                 sendToRenderer("pets-changed", msg.payload.pets);
                 break;
 
               case "switch_pet":
-                if (msg.payload.petId) {
-                  currentPetId = msg.payload.petId;
-                }
-                sendToRenderer("switch-pet", msg.payload.spritesheetPath);
+                sendToRenderer(
+                  "switch-pet",
+                  msg.payload.petId,
+                  msg.payload.spritesheetPath,
+                );
                 break;
             }
           }
@@ -139,54 +135,22 @@ export function createSocketServer(
         );
       });
 
-      // Show native context menu on right-click from renderer
-      ipcMain.on("show-context-menu", (_event, isBubbleVisible: boolean) => {
-        const template: Electron.MenuItemConstructorOptions[] = [
-          {
-            label: "Switch Pet",
-            submenu: petList.map((pet) => ({
-              label: pet.displayName,
-              type: "checkbox" as const,
-              checked: pet.id === currentPetId,
-              click: () => {
-                broadcast(
-                  JSON.stringify({
-                    type: "switch_pet",
-                    payload: { petId: pet.id },
-                  }) + "\n",
-                );
-              },
-            })),
-          },
-          {
-            label: isBubbleVisible ? "Hide Bubble" : "Show Bubble",
-            click: () => {
-              sendToRenderer("toggle-bubble");
-            },
-          },
-          { type: "separator" },
-          {
-            label: "Hide Pet",
-            click: () => {
-              if (!browserWindow.isDestroyed()) {
-                browserWindow.hide();
-              }
-              broadcast(JSON.stringify({ type: "hidden", payload: {} }) + "\n");
-            },
-          },
-          {
-            label: "Quit Pet",
-            click: () => {
-              broadcast(
-                JSON.stringify({ type: "quit_pet", payload: {} }) + "\n",
-              );
-              app.quit();
-            },
-          },
-        ];
+      // Actions from the context menu window (handled by context-menu-manager.ts
+      // which closes the menu first; these handlers fire afterward)
+      ipcMain.on("hide-pet", () => {
+        if (!browserWindow.isDestroyed()) {
+          browserWindow.hide();
+        }
+        broadcast(JSON.stringify({ type: "hidden", payload: {} }) + "\n");
+      });
 
-        const menu = Menu.buildFromTemplate(template);
-        menu.popup();
+      ipcMain.on("quit-pet", () => {
+        broadcast(JSON.stringify({ type: "quit_pet", payload: {} }) + "\n");
+        app.quit();
+      });
+
+      ipcMain.on("toggle-bubble", () => {
+        sendToRenderer("toggle-bubble");
       });
 
       // Bun types omit EventEmitter; Electron's runtime has it
@@ -221,7 +185,9 @@ export function createSocketServer(
       (server as any).removeAllListeners("error");
 
       ipcMain.removeAllListeners("request-switch-pet");
-      ipcMain.removeAllListeners("show-context-menu");
+      ipcMain.removeAllListeners("hide-pet");
+      ipcMain.removeAllListeners("quit-pet");
+      ipcMain.removeAllListeners("toggle-bubble");
 
       for (const socket of sockets) socket.destroy();
       sockets.clear();

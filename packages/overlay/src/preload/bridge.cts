@@ -63,13 +63,14 @@ contextBridge.exposeInMainWorld("electronAPI", {
       ) => callback(pets),
     );
   },
-  onSwitchPet: (callback: (spritesheetPath: string) => void): void => {
-    ipcRenderer.on("switch-pet", (_event: any, spritesheetPath: string) =>
-      callback(spritesheetPath),
+  onSwitchPet: (
+    callback: (petId: string, spritesheetPath: string) => void,
+  ): void => {
+    ipcRenderer.on(
+      "switch-pet",
+      (_event: any, petId: string, spritesheetPath: string) =>
+        callback(petId, spritesheetPath),
     );
-  },
-  requestSwitchPet: (petId: string): void => {
-    ipcRenderer.send("request-switch-pet", petId);
   },
   sendDragDelta: (dx: number, dy: number): void => {
     ipcRenderer.send("drag-delta", dx, dy);
@@ -80,10 +81,13 @@ contextBridge.exposeInMainWorld("electronAPI", {
   onThrowEnd: (callback: () => void): void => {
     ipcRenderer.on("throw-end", (_event: any) => callback());
   },
-  showContextMenu: (isBubbleVisible: boolean): void => {
-    ipcRenderer.send("show-context-menu", isBubbleVisible);
-  },
   onToggleBubble: (callback: () => void): void => {
     ipcRenderer.on("toggle-bubble", (_event: any) => callback());
+  },
+  openContextMenu: (state: unknown): void => {
+    ipcRenderer.send("open-context-menu", state);
+  },
+  closeContextMenu: (): void => {
+    ipcRenderer.send("close-context-menu");
   },
 });

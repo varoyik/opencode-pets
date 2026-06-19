@@ -1,9 +1,10 @@
-import { app } from "electron";
+import { app, ipcMain } from "electron";
 import path from "node:path";
 import os from "node:os";
 import { getSocketPath } from "@opencode-pets/core";
 import { createWindow } from "./window.js";
 import { createSocketServer } from "./ipc-server.js";
+import { ContextMenuManager } from "./context-menu-manager.js";
 
 const SOCKET_PATH = getSocketPath();
 
@@ -86,6 +87,16 @@ if (!gotLock) {
   app.whenReady().then(async () => {
     const create = async () => {
       win = createWindow();
+      const menuManager = new ContextMenuManager(win);
+
+      // Wire context menu window lifecycle
+      ipcMain.on("open-context-menu", (_event, state) => {
+        menuManager.open(state);
+      });
+      ipcMain.on("close-context-menu", () => {
+        menuManager.close();
+      });
+
       const server = createSocketServer(SOCKET_PATH, win);
 
       await server.start();
@@ -95,6 +106,7 @@ if (!gotLock) {
         if (quitting) return; // Re-entry guard
         event.preventDefault();
         quitting = true;
+        menuManager.close();
         server.stop().finally(() => app.quit());
       });
     };
