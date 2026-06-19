@@ -44,9 +44,9 @@ hl.window_rule({
     decorate = false,
     no_blur = true,
     no_shadow = true,
-    no_focus = true,
     no_follow_mouse = true,
     opacity = "0.99 override 0.99 override 0.99 override",
+    suppress_event = "activatefocus",
 })
 ```
 
@@ -73,8 +73,8 @@ windowrule = border_size 0, match:class opencode-pets-overlay
 windowrule = rounding 0, match:class opencode-pets-overlay
 windowrule = decorate off, match:class opencode-pets-overlay
 windowrule = opacity 0.99 override 0.99 override 0.99 override, match:class opencode-pets-overlay
-windowrule = stay_focused on, match:class opencode-pets-overlay
 windowrule = no_follow_mouse on, match:class opencode-pets-overlay
+windowrule = suppress_event activatefocus, match:class opencode-pets-overlay
 ```
 
 Or you can use the block-style syntax instead:
@@ -93,8 +93,8 @@ windowrule {
     rounding = 0
     decorate = off
     opacity = 0.99 override 0.99 override 0.99 override
-    stay_focused = on
     no_follow_mouse = on
+    suppress_event = activatefocus
 }
 ```
 
@@ -132,6 +132,61 @@ The Hyprland team has stated the legacy parser will be dropped in 1–2 releases
 ## Why `opacity 0.99 override`?
 
 Electron often reports the overlay window as fully opaque (alpha = 1) even when its content is transparent. Hyprland therefore skips rendering the desktop behind it. Forcing opacity to `0.99` makes Hyprland treat the window as semi-transparent, which restores proper transparency rendering.
+
+---
+
+## Why no `stay_focused` or `no_focus`?
+
+The overlay is created with Electron's `focusable: false`, so it already tells the X11/XWayland layer not to take focus. Adding Hyprland's `stay_focused` or `no_focus` rules on top of `pin` can confuse Hyprland's input routing for pinned XWayland windows and cause tooltips or clicks to leak to windows on other workspaces (see hyprwm/Hyprland#4135).
+
+Instead, use:
+
+- `no_initial_focus` — so the overlay does not steal focus when it spawns.
+- `no_follow_mouse` — so hovering the pet does not move focus away from the real window you're working in.
+- `suppress_event activatefocus` — so the overlay cannot request focus later.
+
+This keeps the pet interactive for dragging and right-clicking without breaking workspace focus.
+
+---
+
+## Context menu has a black shadow
+
+**Status: fixed.** The overlay now renders its own custom HTML/CSS context menu inside the pet window, styled to match the speech bubble. Because the menu is no longer a native Electron popup, Hyprland cannot draw a WM shadow around it, and the workaround below is no longer needed.
+
+If you are running an older build that still uses the native menu, the issue was that on XWayland it creates an untitled popup window (`class = ""`, `title = ""`) which Hyprland may draw a shadow around. You can remove the decorations from these transient XWayland popups:
+
+**Lua syntax (`hyprland.lua`):**
+
+```lua
+hl.window_rule({
+    name = "opencode-pets-menu-shadow",
+    match = {
+        class = "^$",
+        title = "^$",
+        xwayland = true,
+        float = true,
+        fullscreen = false,
+        pin = false,
+    },
+    border_size = 0,
+    rounding = 0,
+    decorate = false,
+    no_blur = true,
+    no_shadow = true,
+})
+```
+
+**Legacy syntax (`hyprland.conf`):**
+
+```ini
+windowrule = border_size 0, match:class ^$ match:title ^$ match:xwayland true match:float true match:fullscreen false match:pin false
+windowrule = rounding 0, match:class ^$ match:title ^$ match:xwayland true match:float true match:fullscreen false match:pin false
+windowrule = decorate off, match:class ^$ match:title ^$ match:xwayland true match:float true match:fullscreen false match:pin false
+windowrule = no_blur on, match:class ^$ match:title ^$ match:xwayland true match:float true match:fullscreen false match:pin false
+windowrule = no_shadow on, match:class ^$ match:title ^$ match:xwayland true match:float true match:fullscreen false match:pin false
+```
+
+**Note:** This matches every empty-class floating XWayland popup, so it will also remove shadows/borders from context menus of other XWayland apps (e.g., Steam, JetBrains). The current overlay uses a custom HTML/CSS menu rendered inside the overlay, so this workaround is no longer required.
 
 ---
 
@@ -174,6 +229,8 @@ windowrule = size 192 310, match:class opencode-pets-overlay
 ## Generic XWayland drag fix
 
 If drag repositioning does not work, Hyprland's generic XWayland drag rule may help.
+
+> **Warning:** This rule uses `no_focus` on every empty-class floating XWayland popup. It can cause the same workspace-focus confusion described above. Only enable it if drag is broken, and disable it if you start seeing cross-workspace tooltips or clicks.
 
 **Lua syntax (`hyprland.lua`):**
 
@@ -231,6 +288,7 @@ Note: this makes XWayland windows unscaled; toolkit-specific scaling may be need
 - **Black background:** make sure the rule has `opacity 0.99 override ...`. If it persists, try launching with `ELECTRON_OZONE_PLATFORM_HINT=x11` or add `disable-gpu-compositing` to the Electron switches.
 - **Cannot drag:** verify the window is running under XWayland (`hyprctl clients` shows `xwayland: 1`).
 - **Not on all workspaces:** verify `pin = true` and that the window is floating.
+- **Workspace confusion / cross-workspace tooltips:** remove any `stay_focused` or `no_focus` rules for the overlay. The recommended rules use `no_initial_focus`, `no_follow_mouse`, and `suppress_event activatefocus` instead.
 - **Rules not applying:** check the actual `class` and `title` with `hyprctl clients`. The overlay sets `class = opencode-pets-overlay` and `title = OpenCode Pets`. Match your rules against these exact values.
 - **`windowrulev2 is deprecated`:** You're on Hyprland 0.55+. Replace `windowrulev2` with `windowrule` and update each field to use `match:` prefix and explicit values (e.g. `float` → `float on`, `nofocus` → `no_focus on`).
 - **`invalid field X: missing a value`:** The 0.54+ `windowrule` syntax requires explicit values for every field. Change `float` to `float on`, `pin` to `pin on`, etc.
