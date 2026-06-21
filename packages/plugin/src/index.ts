@@ -119,7 +119,7 @@ const petPlugin: Plugin = async (input) => {
     "command.execute.before": async (cmdInput, _output) => {
       if (cmdInput.command !== "pet") return;
 
-      let message: string;
+      let dialogCommand: string;
 
       const overlayDead =
         overlayProcess === null || overlayProcess.exitCode !== null;
@@ -136,7 +136,7 @@ const petPlugin: Plugin = async (input) => {
         ipcClient.sendPets(pets);
         switchToDefaultPet(config.defaultPet);
         ipcClient.sendCurrentMood("idle");
-        message = "Pet overlay launched.";
+        dialogCommand = "pet.show_dialog_launch";
 
         // Start config watcher after first spawn
         if (!unwatchConfig) {
@@ -153,42 +153,22 @@ const petPlugin: Plugin = async (input) => {
         ipcClient.toggleVisibility();
         // Optimistically clear hidden flag — toggle will show if hidden.
         ipcClient.setOverlayHidden(false);
-        message = "Pet visibility toggled.";
+        dialogCommand = "pet.show_dialog_toggle";
       }
 
-      // Inject noReply message (chat entry, no LLM trigger).
-      await client.session.prompt({
-        path: { id: cmdInput.sessionID },
-        body: {
-          noReply: true,
-          parts: [
-            {
-              type: "text",
-              text: message,
-              ignored: true,
-            },
-          ],
-        },
-      });
+      // Dialog overlays the sentinel error from the throw below;
+      // on close/auto-close the session re-renders without it.
+      await client.tui
+        .publish({
+          body: {
+            type: "tui.command.execute",
+            properties: { command: dialogCommand },
+          },
+        })
+        .catch(() => {});
 
+      // Throw aborts the command flow — prevents the LLM from processing /pet.
       throw new Error("__PET_HANDLED__");
-
-      // OpenCode 1.17.6+ catches hook errors and displays them. Opening a
-      // dialog overlays the error; when the user closes it (Esc), the session
-      // re-renders and the transient error disappears because it was never
-      // stored in session state.
-
-      // await client.tui.openHelp().catch(() => {});
-
-      // Throw a minimized error: no stack trace removes the ~8-line code
-      // frame, and AbortError is a standard name many renderers handle
-      // gracefully. Throwing is still the only way to stop the LLM from
-      // processing /pet — there is no output.handled flag (see #25916).
-
-      // const err = new Error("__PET_HANDLED__");
-      // err.name = "AbortError";
-      // (err as any).stack = undefined;
-      // throw err;
     },
   };
 };
