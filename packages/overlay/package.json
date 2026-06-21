@@ -9,18 +9,23 @@
     "assets"
   ],
   "scripts": {
+    "build": "tsc --build && bun scripts/copy-assets.ts",
     "dev": "tsc -b && bun scripts/copy-assets.ts && electron .",
     "dev:watch": "tsc --watch",
-    "copy-assets": "bun scripts/copy-assets.ts"
+    "copy-assets": "bun scripts/copy-assets.ts",
+    "package": "bun run build && electron-builder --dir"
   },
   "dependencies": {
-    "@opencode-pets/core": "workspace:*",
-    "electron": "^42.2.0"
+    "@opencode-pets/core": "workspace:*"
   },
   "author": "varoyik",
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/varoyik/opencode-pets"
+  },
+  "devDependencies": {
+    "electron": "^42.2.0",
+    "electron-builder": "^26.15.3"
   }
 }
