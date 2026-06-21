@@ -4,15 +4,35 @@
   "description": "Desktop virtual pet for OpenCode coding sessions",
   "type": "module",
   "main": "./src/index.ts",
+  "exports": {
+    ".": {
+      "import": "./src/index.ts",
+      "types": "./src/index.ts"
+    },
+    "./tui": {
+      "import": "./dist/tui.js",
+      "types": "./src/tui/index.tsx"
+    }
+  },
   "files": [
-    "src"
+    "src",
+    "dist"
   ],
   "dependencies": {
-    "@opencode-ai/plugin": "^1.16.2",
+    "@opencode-ai/plugin": "^1.17.9",
     "@opencode-pets/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@opentui/core": "^0.4.1",
+    "@opentui/keymap": "^0.4.1",
+    "@opentui/solid": "^0.4.1"
   },
   "scripts": {
     "setup": "bash scripts/setup-dev.sh",
+    "build": "tsc --build tsconfig.json && bun run scripts/build-tui.ts",
+    "build:server": "tsc --build tsconfig.json",
+    "build:tui": "bun run scripts/build-tui.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p src/tui/tsconfig.json",
     "prepublishOnly": "echo 'placeholder'"
   },
   "author": "varoyik",

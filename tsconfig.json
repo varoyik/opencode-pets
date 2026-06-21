@@ -12,6 +12,7 @@
     "verbatimModuleSyntax": true,
     "noEmit": true,
     "isolatedModules": true,
+    "jsx": "preserve",
     "resolveJsonModule": true,
 
     "strict": true,
