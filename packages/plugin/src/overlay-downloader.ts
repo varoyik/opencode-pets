@@ -51,10 +51,25 @@ function buildDownloadUrl(version: string, target: string): string {
 
 /**
  * Dev mode bypass: setup-dev.sh symlinks Electron into the overlay dir.
- * If that symlink exists, the user is developing from the monorepo and
- * the auto-download must not clobber their setup.
+ * If that symlink (or the Windows equivalent) exists, the user is
+ * developing from the monorepo and the auto-download must not clobber
+ * their setup.
+ *
+ * The dev paths here must stay in sync with `resolveDevBinary()` in
+ * overlay-manager.ts — they detect the same setup workflows.
  */
 function isDevMode(): boolean {
+  if (process.platform === "win32") {
+    return existsSync(
+      path.join(
+        OVERLAY_DIR,
+        "node_modules",
+        "electron",
+        "dist",
+        "electron.exe",
+      ),
+    );
+  }
   return existsSync(DEV_ELECTRON_SYMLINK);
 }
 
@@ -74,6 +89,21 @@ async function downloadArchive(url: string, tmpFile: string): Promise<void> {
   await Bun.write(tmpFile, response);
 }
 
+/**
+ * Extract the overlay archive into `destDir`.
+ *
+ * **Archive structure contract:** The archive must contain binary and
+ * resources at its **root** — no `dist-build/<platform>-unpacked/` or
+ * other prefix. The CI job that produces the archive (task 6.4) MUST
+ * strip the electron-builder output directory prefix (e.g., using
+ * `tar -czf archive.tar.gz -C dist-build/linux-unpacked/ .`) so that
+ * extraction here lands files directly into `~/.opencode-pets/overlay/`.
+ *
+ * Expected layout after extraction:
+ *   Linux:   <destDir>/opencode-pets-overlay
+ *   macOS:   <destDir>/opencode-pets-overlay.app/Contents/MacOS/...
+ *   Windows: <destDir>/opencode-pets-overlay.exe
+ */
 async function extractArchive(tmpFile: string, destDir: string): Promise<void> {
   if (process.platform === "win32") {
     const proc = Bun.spawn(

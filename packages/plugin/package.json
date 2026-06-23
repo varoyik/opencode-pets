@@ -1,6 +1,6 @@
 {
   "name": "opencode-pets",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "description": "Desktop virtual pet for OpenCode coding sessions",
   "type": "module",
   "main": "./dist/index.js",

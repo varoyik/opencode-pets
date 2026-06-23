@@ -5,6 +5,7 @@ import { spawnOverlay, killOverlay } from "./overlay-manager.js";
 import { StateDeriver } from "./state-deriver.js";
 import { readConfig, watchConfig } from "./config.js";
 import { scanPets } from "./pet-scanner.js";
+import { ensureOverlayInstalled } from "./overlay-downloader.js";
 import { getSocketPath } from "@opencode-pets/core";
 import type { Config, LogFn } from "@opencode-pets/core";
 
@@ -37,6 +38,43 @@ const petPlugin: Plugin = async (input) => {
   // Initialize config and pets
   const config = readConfig(log);
   const pets = scanPets(log);
+
+  // Ensure overlay is installed (auto-downloads in production). If download
+  // fails, return hooks without overlay management — the plugin still loads
+  // but no pet can be spawned. Retries automatically next session.
+  const overlayAvailable = await ensureOverlayInstalled(client, log);
+
+  if (!overlayAvailable) {
+    return {
+      config: async (config) => {
+        if (config.command === undefined) {
+          config.command = {};
+        }
+        config.command["pet"] = {
+          template: "__PET_COMMAND__",
+          description: "Show or hide the virtual pet overlay",
+        };
+      },
+      dispose: async () => {},
+      event: async () => {},
+      "tool.execute.before": async () => {},
+      "tool.execute.after": async () => {},
+      "command.execute.before": async (cmdInput, _output) => {
+        if (cmdInput.command !== "pet") return;
+        // Show a DialogAlert (when tui.json entry is present) to overlay the
+        // sentinel error; falls back to raw error if TUI plugin isn't loaded.
+        await client.tui
+          .publish({
+            body: {
+              type: "tui.command.execute",
+              properties: { command: "pet.show_dialog_error" },
+            },
+          })
+          .catch(() => {});
+        throw new Error("__PET_HANDLED__");
+      },
+    };
+  }
 
   const ipcClient = new IpcClient(socketPath, log, () => {
     toast("Pet overlay crashed — launch with /pet to restart", "error");

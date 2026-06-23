@@ -5,6 +5,7 @@ const AUTO_CLOSE_MS = 3000;
 
 const showDialog = (
   api: Parameters<TuiPlugin>[0],
+  title: string,
   message: string,
   timerHolder: { current: ReturnType<typeof setTimeout> | null },
 ): void => {
@@ -24,7 +25,7 @@ const showDialog = (
 
   api.ui.dialog.setSize("medium");
   api.ui.dialog.replace(
-    () => <api.ui.DialogAlert title="Pet Status" message={message} />,
+    () => <api.ui.DialogAlert title={title} message={message} />,
     onClose,
   );
 
@@ -45,7 +46,7 @@ const tui: TuiPlugin = async (api, _options, _meta) => {
         title: "Pet Dialog (Launch)",
         category: "OpenCode Pets",
         run() {
-          showDialog(api, "Pet overlay launched.", timerHolder);
+          showDialog(api, "Pet Status", "Pet overlay launched.", timerHolder);
         },
       },
       {
@@ -53,7 +54,20 @@ const tui: TuiPlugin = async (api, _options, _meta) => {
         title: "Pet Dialog (Toggle)",
         category: "OpenCode Pets",
         run() {
-          showDialog(api, "Pet visibility toggled.", timerHolder);
+          showDialog(api, "Pet Status", "Pet visibility toggled.", timerHolder);
+        },
+      },
+      {
+        name: "pet.show_dialog_error",
+        title: "Pet Dialog (Error)",
+        category: "OpenCode Pets",
+        run() {
+          showDialog(
+            api,
+            "Pet Unavailable",
+            "Pet overlay is not available. The automatic setup was unable to download and install the overlay (check your network connection). Setup will retry automatically next session.",
+            timerHolder,
+          );
         },
       },
     ],
