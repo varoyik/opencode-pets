@@ -48,6 +48,7 @@ jobs:
         run: bunx tsc --build packages/core
       - name: Build overlay
         working-directory: packages/overlay
+        shell: bash
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: |
