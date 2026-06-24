@@ -45,7 +45,7 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
       - name: Build shared core
-        run: tsc --build packages/core
+        run: bunx tsc --build packages/core
       - name: Build overlay
         working-directory: packages/overlay
         env:
@@ -71,15 +71,19 @@ jobs:
           tar -czf "overlay-${{ matrix.target }}.tar.gz" -C "$MAC_DIR" .
       - name: Compress (Windows)
         if: matrix.platform == 'win'
-        shell: bash
+        shell: pwsh
         working-directory: packages/overlay
         run: |
-          cd dist-build/win-unpacked
-          zip -r "../../overlay-${{ matrix.target }}.zip" .
-      - name: Generate checksum (Linux/macOS)
-        if: matrix.platform != 'win'
+          Set-Location dist-build/win-unpacked
+          Compress-Archive -Path * -DestinationPath "../../overlay-${{ matrix.target }}.zip"
+      - name: Generate checksum (Linux)
+        if: matrix.platform == 'linux'
         working-directory: packages/overlay
         run: sha256sum "overlay-${{ matrix.target }}.${{ matrix.ext }}" > "overlay-${{ matrix.target }}.${{ matrix.ext }}.sha256"
+      - name: Generate checksum (macOS)
+        if: matrix.platform == 'mac'
+        working-directory: packages/overlay
+        run: shasum -a 256 "overlay-${{ matrix.target }}.${{ matrix.ext }}" > "overlay-${{ matrix.target }}.${{ matrix.ext }}.sha256"
       - name: Generate checksum (Windows)
         if: matrix.platform == 'win'
         shell: bash
