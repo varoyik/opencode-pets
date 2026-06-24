@@ -128,9 +128,8 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
       - name: Publish to npm
-        working-directory: packages/plugin
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           npm config set //registry.npmjs.org/:_authToken "$NODE_AUTH_TOKEN"
-          npm publish
+          npm publish -w packages/plugin
