@@ -16,6 +16,7 @@
   },
   "devDependencies": {
     "@opencode-ai/plugin": "^1.16.2",
+    "@opencode-pets/core": "workspace:*",
     "@opentui/core": "^0.4.1",
     "@opentui/keymap": "^0.4.1",
     "@opentui/solid": "^0.4.1"
