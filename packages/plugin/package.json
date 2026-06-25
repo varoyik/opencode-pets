@@ -1,7 +1,7 @@
 {
   "name": "opencode-pets",
-  "version": "1.0.0",
-  "description": "Desktop virtual pet for OpenCode coding sessions",
+  "version": "1.0.1",
+  "description": "Desktop pet that reacts to your OpenCode coding sessions in real-time",
   "type": "module",
   "main": "./dist/index.js",
   "exports": {
@@ -34,8 +34,23 @@
   },
   "keywords": [
     "opencode",
-    "pets",
-    "virtual-pet"
+    "desktop-pet",
+    "virtual-pet",
+    "desktop-companion",
+    "coding-companion",
+    "electron",
+    "overlay",
+    "electron-overlay",
+    "spritesheet",
+    "petdex",
+    "cross-platform",
+    "macos",
+    "windows",
+    "linux",
+    "bun",
+    "coding-agent",
+    "developer-tools",
+    "opencode-plugin"
   ],
   "publishConfig": {
     "access": "public"
