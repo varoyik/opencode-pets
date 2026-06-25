@@ -79,42 +79,37 @@ async function downloadArchive(url: string, tmpFile: string): Promise<void> {
   await Bun.write(tmpFile, new Uint8Array(buffer));
 }
 
+/** Spawn a process and wait for it to finish, with a timeout. */
+async function spawnWithTimeout(
+  cmd: string[],
+  timeoutMs: number,
+): Promise<void> {
+  const proc = Bun.spawn(cmd, { stderr: "pipe" });
+  const timeout = Bun.sleep(timeoutMs).then(() => {
+    proc.kill();
+    throw new Error(`Extraction timed out after ${timeoutMs}ms`);
+  });
+  const [exitCode, stderr] = await Promise.race([
+    Promise.all([proc.exited, new Response(proc.stderr).text()]),
+    timeout,
+  ]);
+  if (exitCode !== 0) {
+    throw new Error(`Extraction failed (exit ${exitCode}): ${stderr}`);
+  }
+}
+
 async function extractArchive(tmpFile: string, destDir: string): Promise<void> {
   if (process.platform === "win32") {
-    const proc = Bun.spawn(
+    await spawnWithTimeout(
       [
         "powershell",
         "-Command",
         `Expand-Archive -Path "${tmpFile}" -DestinationPath "${destDir}" -Force`,
       ],
-      { stderr: "pipe" },
+      120_000,
     );
-    const timeout = Bun.sleep(120_000).then(() => {
-      proc.kill();
-      throw new Error("Extraction timed out after 120s");
-    });
-    const [exitCode, stderr] = await Promise.race([
-      Promise.all([proc.exited, new Response(proc.stderr).text()]),
-      timeout,
-    ]);
-    if (exitCode !== 0) {
-      throw new Error(`Extraction failed (exit ${exitCode}): ${stderr}`);
-    }
   } else {
-    const proc = Bun.spawn(["tar", "-xzf", tmpFile, "-C", destDir], {
-      stderr: "pipe",
-    });
-    const timeout = Bun.sleep(120_000).then(() => {
-      proc.kill();
-      throw new Error("Extraction timed out after 120s");
-    });
-    const [exitCode, stderr] = await Promise.race([
-      Promise.all([proc.exited, new Response(proc.stderr).text()]),
-      timeout,
-    ]);
-    if (exitCode !== 0) {
-      throw new Error(`Extraction failed (exit ${exitCode}): ${stderr}`);
-    }
+    await spawnWithTimeout(["tar", "-xzf", tmpFile, "-C", destDir], 120_000);
   }
 }
 

@@ -170,15 +170,9 @@ document.addEventListener("DOMContentLoaded", () => {
   let dragStartMood = currentMood;
 
   function setRunDirection(velocityX: number): void {
-    if (velocityX < 0) {
-      clearMoodClasses();
-      pet.classList.remove("run-right");
-      pet.classList.add("run-left");
-    } else {
-      clearMoodClasses();
-      pet.classList.remove("run-left");
-      pet.classList.add("run-right");
-    }
+    clearMoodClasses();
+    pet.classList.remove("run-left", "run-right");
+    pet.classList.add(velocityX < 0 ? "run-left" : "run-right");
   }
 
   function restoreBubbleIfNeeded(): void {

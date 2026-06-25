@@ -29,12 +29,15 @@ export function getOpenCodeConfigDir(): string {
   if (process.env["OPENCODE_CONFIG_DIR"]) {
     return process.env["OPENCODE_CONFIG_DIR"];
   }
-  const configHome = process.env["XDG_CONFIG_HOME"]
-    ? process.env["XDG_CONFIG_HOME"]
-    : process.platform === "win32" && process.env["APPDATA"]
-      ? process.env["APPDATA"]
-      : join(homedir(), ".config");
-  return join(configHome, "opencode");
+  return join(getConfigHome(), "opencode");
+}
+
+/** Resolve the config home directory, falling through platform defaults. */
+function getConfigHome(): string {
+  if (process.env["XDG_CONFIG_HOME"]) return process.env["XDG_CONFIG_HOME"];
+  if (process.platform === "win32" && process.env["APPDATA"])
+    return process.env["APPDATA"];
+  return join(homedir(), ".config");
 }
 
 /**
@@ -73,15 +76,6 @@ export const DEFAULT_CONFIG: Config = {
 };
 
 const TEMP_SUFFIX = ".tmp";
-
-function doLog(
-  log: LogFn | undefined,
-  level: "warn" | "error",
-  message: string,
-  extra?: Record<string, unknown>,
-): void {
-  log?.(level, message, extra);
-}
 
 /**
  * Read the config file, validate it with Zod, and return the parsed config.
@@ -139,7 +133,7 @@ export function writeConfig(config: Config, log?: LogFn): void {
     writeFileSync(tempPath, JSON.stringify(config, null, 2) + "\n", "utf-8");
     renameSync(tempPath, configPath);
   } catch (err) {
-    doLog(log, "error", "Failed to write config file", {
+    log?.("error", "Failed to write config file", {
       error: String(err),
     });
     try {
@@ -175,8 +169,7 @@ export function watchConfig(
       const result = ConfigSchema.safeParse(parsed);
 
       if (!result.success) {
-        doLog(
-          log,
+        log?.(
           "warn",
           "Invalid config during hot-reload, keeping previous valid config",
           { errors: result.error.format() },
@@ -186,7 +179,7 @@ export function watchConfig(
 
       onChange(result.data);
     } catch (err) {
-      doLog(log, "warn", "Failed to read config during hot-reload", {
+      log?.("warn", "Failed to read config during hot-reload", {
         error: String(err),
       });
     }
@@ -206,7 +199,7 @@ export function watchConfig(
       }
     });
   } catch (err) {
-    doLog(log, "warn", "Failed to start config watcher", {
+    log?.("warn", "Failed to start config watcher", {
       error: String(err),
     });
     return () => {};
@@ -221,7 +214,7 @@ export function watchConfig(
 }
 
 function useDefaults(reason: string, detail?: unknown, log?: LogFn): Config {
-  doLog(log, "warn", reason, { detail });
+  log?.("warn", reason, { detail });
   writeConfig(DEFAULT_CONFIG, log);
   return DEFAULT_CONFIG;
 }

@@ -127,23 +127,10 @@ export class IpcClient {
   /** Queue current mood as initial for next handshake, dropping stale moods from queue. */
   sendCurrentMood(mood: PetMood): void {
     if (this.state === "closed") return;
-
     this.currentMood = mood;
     this.initialMood = mood;
-    const msg = this.buildMessage("set_mood", { mood });
-
     this.clearStaleMoodMessages();
-    if (this.queue.length >= MAX_QUEUE_SIZE) {
-      this.queue.shift();
-    }
-    this.queue.push(msg);
-
-    if (this.state === "connected" && this.socket) {
-      this.flushQueue();
-    } else if (this.state === "idle") {
-      this.retryCount = 0;
-      this.connect();
-    }
+    this.send(this.buildMessage("set_mood", { mood }));
   }
 
   private cleanupSocket(): void {
@@ -428,10 +415,6 @@ export class IpcClient {
   }
 
   private clearMessagesByPrefix(...prefixes: string[]): void {
-    if (prefixes.length === 1) {
-      this.queue = this.queue.filter((msg) => !msg.startsWith(prefixes[0]!));
-      return;
-    }
     this.queue = this.queue.filter(
       (msg) => !prefixes.some((p) => msg.startsWith(p)),
     );

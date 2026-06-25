@@ -247,19 +247,16 @@ export function createWindow(): BrowserWindow {
 
       const wa = getPrimaryWorkArea();
       const b = getWindowBoundsForPet(wa);
-      if (nextX < b.minX) {
-        nextX = b.minX;
+      const clampedX = Math.max(b.minX, Math.min(nextX, b.maxX));
+      const clampedY = Math.max(b.minY, Math.min(nextY, b.maxY));
+
+      if (clampedX !== nextX) {
         throwVelocityX = -throwVelocityX * BOUNCE_RESTITUTION;
-      } else if (nextX > b.maxX) {
-        nextX = b.maxX;
-        throwVelocityX = -throwVelocityX * BOUNCE_RESTITUTION;
+        nextX = clampedX;
       }
-      if (nextY < b.minY) {
-        nextY = b.minY;
+      if (clampedY !== nextY) {
         throwVelocityY = -throwVelocityY * BOUNCE_RESTITUTION;
-      } else if (nextY > b.maxY) {
-        nextY = b.maxY;
-        throwVelocityY = -throwVelocityY * BOUNCE_RESTITUTION;
+        nextY = clampedY;
       }
 
       if (!Number.isFinite(nextX) || !Number.isFinite(nextY)) {

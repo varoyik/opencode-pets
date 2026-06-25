@@ -111,8 +111,6 @@ const petPlugin: Plugin = async (input) => {
     }
   });
 
-  ipcClient.onHidden(() => {});
-
   return {
     config: async (config) => {
       if (config.command === undefined) {

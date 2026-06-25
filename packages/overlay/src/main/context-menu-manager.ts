@@ -87,14 +87,11 @@ export class ContextMenuManager {
       },
     });
 
-    // Linux: safeguard to keep menu above pet (parent handles stacking
-    // but always-on-top adds _NET_WM_STATE_ABOVE as extra insurance).
-    if (process.platform === "linux") {
-      this.menuWindow.setAlwaysOnTop(true, "pop-up-menu");
-    }
-
-    // macOS: no special panel behavior needed (menu is a regular floating window)
-    if (process.platform === "win32") {
+    // Linux/Win32: keep menu above pet. On Linux, always-on-top adds
+    // _NET_WM_STATE_ABOVE as extra insurance beyond parent stacking;
+    // on Win32, "pop-up-menu" level keeps it above the taskbar.
+    // macOS: no special handling needed (regular floating window).
+    if (process.platform === "linux" || process.platform === "win32") {
       this.menuWindow.setAlwaysOnTop(true, "pop-up-menu");
     }
 

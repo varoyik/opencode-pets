@@ -45,22 +45,19 @@ export function reducer(state: PetState, event: PetEvent): PetState {
 
   // Only idle when all counters are zero and no temporary state
   if (event.type === "IdleTimeout") {
-    if (state.temporary) {
-      return state;
-    }
+    if (state.temporary) return state;
     if (
-      state.activeStreams === 0 &&
-      state.activeTools === 0 &&
-      !state.waitingPermission
-    ) {
-      if (state.mood === "idle") return state;
-      return {
-        ...state,
-        mood: "idle",
-        previousMood: state.mood,
-      };
-    }
-    return state;
+      state.activeStreams > 0 ||
+      state.activeTools > 0 ||
+      state.waitingPermission
+    )
+      return state;
+    if (state.mood === "idle") return state;
+    return {
+      ...state,
+      mood: "idle",
+      previousMood: state.mood,
+    };
   }
 
   let nextState = { ...state };
