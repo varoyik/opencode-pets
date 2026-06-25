@@ -1,6 +1,6 @@
 {
   "name": "opencode-pets",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Desktop pet that reacts to your OpenCode coding sessions in real-time",
   "type": "module",
   "main": "./dist/index.js",
@@ -24,6 +24,8 @@
   "scripts": {
     "build": "bun build src/index.ts --outdir dist --target bun --format esm --external @opencode-ai/plugin && bun run scripts/build-tui.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p src/tui/tsconfig.json",
+    "prepack": "cp ../../README.md README.md",
+    "postpack": "rm -f README.md",
     "prepublishOnly": "bun run build"
   },
   "author": "varoyik",
