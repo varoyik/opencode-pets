@@ -1,4 +1,3 @@
-/** The six pet moods. */
 export const ALL_MOODS = [
   "idle",
   "thinking",
@@ -19,9 +18,7 @@ export interface PetState {
   expiresAt?: number;
   /** Number of active text/reasoning streams. */
   activeStreams: number;
-  /** Number of currently executing tools. */
   activeTools: number;
-  /** True when a permission prompt is pending. */
   waitingPermission: boolean;
 }
 

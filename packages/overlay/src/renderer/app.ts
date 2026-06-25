@@ -210,7 +210,7 @@ document.addEventListener("DOMContentLoaded", () => {
     smoothVelocityY = 0;
     dragStartMood = currentMood;
     pet.classList.add("dragging");
-    // Hide bubble during drag, save state for restore
+    // Cache bubble state to restore after drag
     if (!bubble.classList.contains("bubble-hidden")) {
       bubbleRestoreText = bubbleBody.textContent;
       bubbleRestoreDuration = bubbleDurationMs;

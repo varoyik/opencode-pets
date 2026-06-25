@@ -53,7 +53,6 @@ export class ContextMenuManager {
 
   open(state: MenuState): void {
     if (this.menuWindow && !this.menuWindow.isDestroyed()) {
-      // Focus existing menu window
       this.menuWindow.focus();
       return;
     }
@@ -121,7 +120,6 @@ export class ContextMenuManager {
       Math.round(this.initialY),
     );
 
-    // Send menu-state when renderer is ready
     ipcMain.on("menu-ready", () => {
       if (this.menuWindow && !this.menuWindow.isDestroyed()) {
         this.menuWindow.webContents.send("menu-state", state);
@@ -139,7 +137,6 @@ export class ContextMenuManager {
         let pendingY: number | null = null;
 
         if (this.initialWidth === 0) {
-          // First size report — store initial width
           this.initialWidth = size.width;
 
           const wa = screen.getDisplayNearestPoint(

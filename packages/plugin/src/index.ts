@@ -35,13 +35,10 @@ const petPlugin: Plugin = async (input) => {
       .catch(() => {});
   }
 
-  // Initialize config and pets
   const config = readConfig(log);
   const pets = scanPets(log);
 
-  // Ensure overlay is installed (auto-downloads in production). If download
-  // fails, return hooks without overlay management — the plugin still loads
-  // but no pet can be spawned. Retries automatically next session.
+  // Auto-download overlay binary. On failure, load plugin without pet management.
   const overlayAvailable = await ensureOverlayInstalled(client, log);
 
   if (!overlayAvailable) {
@@ -114,9 +111,7 @@ const petPlugin: Plugin = async (input) => {
     }
   });
 
-  ipcClient.onHidden(() => {
-    // Overlay hidden — no action needed.
-  });
+  ipcClient.onHidden(() => {});
 
   return {
     config: async (config) => {
@@ -180,7 +175,6 @@ const petPlugin: Plugin = async (input) => {
         if (!unwatchConfig) {
           unwatchConfig = watchConfig((newConfig: Config) => {
             ipcClient.sendConfig(newConfig);
-            // Auto-switch if defaultPet changed
             if (newConfig.defaultPet !== config.defaultPet) {
               switchToDefaultPet(newConfig.defaultPet);
             }

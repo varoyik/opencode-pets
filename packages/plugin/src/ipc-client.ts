@@ -124,13 +124,7 @@ export class IpcClient {
     this.overlayHidden = hidden;
   }
 
-  /**
-   * Send the current mood, dropping any stale queued moods first.
-   * Used after overlay spawn to ensure only the current mood is reflected,
-   * not stale history. Also stores the mood as the initial mood for the
-   * next handshake, so the overlay always starts with this mood regardless
-   * of SSE events that arrive between spawn and connection.
-   */
+  /** Queue current mood as initial for next handshake, dropping stale moods from queue. */
   sendCurrentMood(mood: PetMood): void {
     if (this.state === "closed") return;
 
@@ -138,7 +132,6 @@ export class IpcClient {
     this.initialMood = mood;
     const msg = this.buildMessage("set_mood", { mood });
 
-    // Queue the mood and flush if connected, or connect if idle.
     this.clearStaleMoodMessages();
     if (this.queue.length >= MAX_QUEUE_SIZE) {
       this.queue.shift();
@@ -461,18 +454,12 @@ export class IpcClient {
       return;
     }
 
-    // Keep only non-set_mood messages and the last set_mood message
     this.queue = this.queue.filter(
       (msg, idx) => !msg.startsWith(SET_MOOD_PREFIX) || idx === lastMoodIndex,
     );
   }
 
-  /**
-   * Remove ALL queued set_mood and show_bubble messages.
-   * Used before the handshake so stale state changes from SSE events
-   * that arrived between spawn and connection don't override the
-   * initial mood or show a stale bubble.
-   */
+  /** Clear queued mood+bubble before handshake — prevents stale SSE overrides. */
   private clearStaleStateMessages(): void {
     this.clearMessagesByPrefix(SET_MOOD_PREFIX, SHOW_BUBBLE_PREFIX);
   }

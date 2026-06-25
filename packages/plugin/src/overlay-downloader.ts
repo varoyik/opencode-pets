@@ -14,11 +14,7 @@ import pkg from "../package.json" with { type: "json" };
 
 type OpencodeClient = PluginInput["client"];
 
-/**
- * Overlay version this plugin expects. Sourced from the plugin's own
- * package.json version — the overlay release and plugin release are
- * versioned in lockstep, so a mismatch triggers a re-download.
- */
+/** Overlay version — lockstepped with plugin package.json. */
 const OVERLAY_VERSION: string = pkg.version;
 
 const OVERLAY_DIR: string = resolveOverlayPath();
@@ -49,15 +45,7 @@ function buildDownloadUrl(version: string, target: string): string {
   return `https://github.com/${RELEASE_OWNER}/${RELEASE_REPO}/releases/download/v${version}/overlay-${target}.${ext}`;
 }
 
-/**
- * Dev mode bypass: setup-dev.sh symlinks Electron into the overlay dir.
- * If that symlink (or the Windows equivalent) exists, the user is
- * developing from the monorepo and the auto-download must not clobber
- * their setup.
- *
- * The dev paths here must stay in sync with `resolveDevBinary()` in
- * overlay-manager.ts — they detect the same setup workflows.
- */
+/** Dev mode — symlinked Electron detected; skip download. */
 function isDevMode(): boolean {
   if (process.platform === "win32") {
     return existsSync(
@@ -86,34 +74,11 @@ async function downloadArchive(url: string, tmpFile: string): Promise<void> {
       `Download failed: HTTP ${response.status} ${response.statusText}`,
     );
   }
-  // Work around Bun 1.3.12 bug: Bun.write(path, response) buffers the entire
-  // body in memory before writing the first byte. If the CDN stalls between
-  // chunks the promise deadlocks and never settles (#16808, #21455, #30594).
-  // Using arrayBuffer() avoids the streaming deadlock path.
-  //
-  // No custom timeout — Bun's default 5-minute idle timeout (resets on each
-  // byte received) handles stalled connections while letting slow-but-
-  // progressing downloads complete. The tar extraction has its own 2-min
-  // timeout below.
+  // Bun.write streaming deadlocks on stall (#16808, #21455, #30594) — use arrayBuffer().
   const buffer = await response.arrayBuffer();
   await Bun.write(tmpFile, new Uint8Array(buffer));
 }
 
-/**
- * Extract the overlay archive into `destDir`.
- *
- * **Archive structure contract:** The archive must contain binary and
- * resources at its **root** — no `dist-build/<platform>-unpacked/` or
- * other prefix. The CI job that produces the archive (task 6.4) MUST
- * strip the electron-builder output directory prefix (e.g., using
- * `tar -czf archive.tar.gz -C dist-build/linux-unpacked/ .`) so that
- * extraction here lands files directly into `~/.opencode-pets/overlay/`.
- *
- * Expected layout after extraction:
- *   Linux:   <destDir>/opencode-pets-overlay
- *   macOS:   <destDir>/opencode-pets-overlay.app/Contents/MacOS/...
- *   Windows: <destDir>/opencode-pets-overlay.exe
- */
 async function extractArchive(tmpFile: string, destDir: string): Promise<void> {
   if (process.platform === "win32") {
     const proc = Bun.spawn(
@@ -161,20 +126,11 @@ function showToast(
   client.tui.showToast({ body: { message, variant } }).catch(() => {});
 }
 
-/**
- * Ensure the platform-specific overlay binary is installed at
- * `~/.opencode-pets/overlay/`. Skips the download when dev mode is
- * detected (symlinked Electron) or the VERSION file already matches.
- * On failure, logs the error, shows a failure toast, and returns
- * `false` — the caller should proceed without spawning a pet.
- *
- * Never throws: all errors are caught and translated into a `false` return.
- */
+/** Ensure overlay binary is installed. Never throws — returns false on failure. */
 export async function ensureOverlayInstalled(
   client: OpencodeClient,
   log: LogFn,
 ): Promise<boolean> {
-  // Dev mode — setup-dev.sh symlinked Electron; skip download entirely.
   if (isDevMode()) {
     log(
       "debug",

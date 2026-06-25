@@ -12,7 +12,6 @@ export interface Config {
 }
 
 export interface IElectronAPI {
-  // Pet window methods
   getSpritesheetPath: () => string;
   onMoodChanged: (callback: (mood: string) => void) => void;
   onBubble: (callback: (text: string, duration: number) => void) => void;
@@ -32,7 +31,6 @@ export interface IElectronAPI {
   }) => void;
   closeContextMenu: () => void;
 
-  // Menu window methods
   onMenuState: (
     callback: (state: {
       bubbleVisible: boolean;

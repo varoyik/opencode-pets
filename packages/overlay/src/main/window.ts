@@ -77,14 +77,7 @@ function getDefaultWindowPosition(
 const INT32_MIN = -0x80000000; // -2,147,483,648
 const INT32_MAX = 0x7fffffff; // 2,147,483,647
 
-/**
- * Set window position with crash-proof guards.
- * - Clamps to int32 range, which is what Electron/Chromium uses internally.
- * - Wraps the Electron call in try-catch as a final safety net — Electron's
- *   native layer can reject certain edge-case coordinate values on X11 even
- *   when `Number.isFinite` and int32 clamping pass.
- * - This is defense-in-depth: guards co-located with the call cannot be bypassed.
- */
+/** Set window position with crash-proof guards. */
 function safeSetPosition(
   win: BrowserWindow,
   x: number | undefined,
@@ -137,14 +130,12 @@ export function createWindow(): BrowserWindow {
     backgroundColor: "#00000000",
     opacity: winOnly ? 0.9999999 : 1.0,
 
-    // macOS-only
     ...(macOnly && {
       type: "panel" as const,
       hiddenInMissionControl: true,
       enableLargerThanScreen: true,
     }),
 
-    // Windows-only
     ...(winOnly && {
       thickFrame: false,
     }),

@@ -66,7 +66,6 @@ export const ConfigSchema = z.object({
 
 export type Config = z.infer<typeof ConfigSchema>;
 
-/** Hardcoded defaults used when config file is missing or invalid. */
 export const DEFAULT_CONFIG: Config = {
   defaultPet: "gutsy",
   idleTimeoutMs: 30000,

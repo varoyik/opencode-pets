@@ -35,7 +35,8 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 .DS_Store
 
 # other stuff
-openspec/
+openspec/changes/archive/
+openspec/config.yaml
 .opencode/
 plans/
 ROADMAP.md

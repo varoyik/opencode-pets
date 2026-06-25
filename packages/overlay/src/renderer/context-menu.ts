@@ -172,7 +172,6 @@ document.addEventListener("DOMContentLoaded", () => {
     e.preventDefault();
   });
 
-  // Prevent mousedown from propagating outside the container
   document.addEventListener("mousedown", (e) => {
     e.stopPropagation();
   });

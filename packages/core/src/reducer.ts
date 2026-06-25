@@ -11,10 +11,7 @@ export const INITIAL_STATE: PetState = {
   waitingPermission: false,
 };
 
-/**
- * Derive the base mood from context counters.
- * Ordered: permission > tools > streams > idle
- */
+/** Priority: waiting > working > thinking > idle */
 function deriveMood(
   state: Pick<PetState, "activeStreams" | "activeTools" | "waitingPermission">,
 ): PetMood {
@@ -25,16 +22,8 @@ function deriveMood(
 }
 
 /**
- * Pure-function pet state reducer.
- *
- * Derives mood from active session context:
- * - waitingPermission → waiting
- * - activeTools > 0 → working
- * - activeStreams > 0 → thinking
- * - else → idle
- *
- * Temporary states (done, error) override the derived mood while active.
- * Counter changes are applied first, then mood is re-derived.
+ * Pure reducer: context-aware mood derivation with temporary state expiry
+ * and counter-first re-derivation.
  */
 export function reducer(state: PetState, event: PetEvent): PetState {
   const now = Date.now();
@@ -54,8 +43,7 @@ export function reducer(state: PetState, event: PetEvent): PetState {
     return reducer(reverted, event);
   }
 
-  // IdleTimeout: only transition to idle when all counters are zero
-  // and no temporary state is active
+  // Only idle when all counters are zero and no temporary state
   if (event.type === "IdleTimeout") {
     if (state.temporary) {
       return state;
@@ -135,11 +123,8 @@ export function reducer(state: PetState, event: PetEvent): PetState {
     };
   }
 
-  // For all other events, set mood to derived mood
-  // (temporary states are still active if they haven't expired — handled above)
   if (state.temporary) {
-    // While temporary is active, keep the temporary mood but update counters.
-    // The expiry check at the top will revert when time is up.
+    // Keep temporary mood while active, update counters. Expiry above handles revert.
     return nextState;
   }
 

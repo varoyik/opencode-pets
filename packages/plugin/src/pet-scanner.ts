@@ -76,7 +76,6 @@ function scanPetsDir(dir: string): ScanResult {
       continue;
     }
 
-    // Validate that the referenced spritesheet exists
     const spritesheetPath = join(petDir, result.data.spritesheetPath);
     if (!existsSync(spritesheetPath)) {
       errors.push(
@@ -102,7 +101,6 @@ export function scanPets(log?: LogFn): PetManifest[] {
   const userResult = scanPetsDir(getUserPetsDir());
   const codexResult = scanPetsDir(getCodexPetsDir());
 
-  // Log warnings for invalid pets
   if (log) {
     for (const result of [bundledResult, userResult, codexResult]) {
       for (const error of result.errors) {

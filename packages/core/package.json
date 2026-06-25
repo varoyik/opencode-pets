@@ -1,6 +1,6 @@
 {
   "name": "@opencode-pets/core",
-  "version": "0.0.0",
+  "version": "1.0.1",
   "description": "Shared domain logic for opencode-pets",
   "type": "module",
   "main": "./dist/index.js",

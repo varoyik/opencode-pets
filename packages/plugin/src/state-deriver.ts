@@ -88,7 +88,6 @@ export class StateDeriver {
   }
 
   handleEvent(event: PetEvent): void {
-    // Extract context from event before calling the pure reducer
     if (event.type === "ToolRunning" && event.toolName) {
       this.currentToolName = event.toolName;
     }
@@ -108,8 +107,7 @@ export class StateDeriver {
       }
     }
 
-    // When the temporary error state expires, clear the error flag so it
-    // doesn't leak into the next session and silently skip its done celebration.
+    // Clear error flag after temp state expires — prevents session leak.
     if (this.hasError && newState.mood !== "error" && !newState.temporary) {
       this.hasError = false;
     }
@@ -121,7 +119,6 @@ export class StateDeriver {
       this.resetIdleTimer();
     }
 
-    // Schedule or clear temporary-state expiry timer
     this.manageExpiryTimer();
   }
 
@@ -143,10 +140,7 @@ export class StateDeriver {
           return;
         }
 
-        // Fire StreamStarted on the FIRST message.part.updated for this part ID.
-        // We do NOT use delta to decide — in some OpenCode setups delta is always
-        // undefined, which caused StreamStarted and StreamEnded to fire in the
-        // same tick, cancelling each other out.
+        // Don't track by delta — always undefined in some SDK setups, causing rapid fire/cancel.
         if (!this.activeStreamParts.has(part.id)) {
           this.activeStreamParts.add(part.id);
           this.handleEvent({ type: "StreamStarted" });
@@ -202,11 +196,7 @@ export class StateDeriver {
     return this.state.mood;
   }
 
-  /**
-   * Reset all state to initial — called when the overlay is spawned
-   * so stale counters from pre-spawn SSE events don't leak into the
-   * fresh pet session.
-   */
+  /** Reset state for fresh spawn — clears stale pre-spawn counters. */
   reset(): void {
     this.dispose();
     this.state = { ...INITIAL_STATE };
@@ -311,10 +301,7 @@ export class StateDeriver {
     }, this.idleTimeoutMs);
   }
 
-  /**
-   * Schedule a timer to fire when the current temporary state expires.
-   * If no temporary state is active, clear any pending expiry timer.
-   */
+  /** Fire expiry timer when temporary state expires. */
   private manageExpiryTimer(): void {
     if (this.expiryTimer !== null) {
       clearTimeout(this.expiryTimer);

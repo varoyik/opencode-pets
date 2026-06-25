@@ -5,7 +5,6 @@ export const PetManifestSchema = z.object({
   id: z.string(),
   /** Human-readable name shown in the pet selector. */
   displayName: z.string(),
-  /** Optional short description of the pet. */
   description: z.string().optional(),
   /** Filename of the spritesheet relative to the pet directory (e.g. "spritesheet.webp"). */
   spritesheetPath: z.string(),
