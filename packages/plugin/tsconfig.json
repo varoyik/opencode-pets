@@ -9,5 +9,6 @@
     "allowImportingTsExtensions": false
   },
   "include": ["src"],
-  "exclude": ["src/tui"]
+  "exclude": ["src/tui"],
+  "references": [{ "path": "../core" }]
 }

@@ -86,7 +86,17 @@ async function downloadArchive(url: string, tmpFile: string): Promise<void> {
       `Download failed: HTTP ${response.status} ${response.statusText}`,
     );
   }
-  await Bun.write(tmpFile, response);
+  // Work around Bun 1.3.12 bug: Bun.write(path, response) buffers the entire
+  // body in memory before writing the first byte. If the CDN stalls between
+  // chunks the promise deadlocks and never settles (#16808, #21455, #30594).
+  // Using arrayBuffer() avoids the streaming deadlock path.
+  //
+  // No custom timeout — Bun's default 5-minute idle timeout (resets on each
+  // byte received) handles stalled connections while letting slow-but-
+  // progressing downloads complete. The tar extraction has its own 2-min
+  // timeout below.
+  const buffer = await response.arrayBuffer();
+  await Bun.write(tmpFile, new Uint8Array(buffer));
 }
 
 /**
@@ -114,9 +124,13 @@ async function extractArchive(tmpFile: string, destDir: string): Promise<void> {
       ],
       { stderr: "pipe" },
     );
-    const [exitCode, stderr] = await Promise.all([
-      proc.exited,
-      new Response(proc.stderr).text(),
+    const timeout = Bun.sleep(120_000).then(() => {
+      proc.kill();
+      throw new Error("Extraction timed out after 120s");
+    });
+    const [exitCode, stderr] = await Promise.race([
+      Promise.all([proc.exited, new Response(proc.stderr).text()]),
+      timeout,
     ]);
     if (exitCode !== 0) {
       throw new Error(`Extraction failed (exit ${exitCode}): ${stderr}`);
@@ -125,9 +139,13 @@ async function extractArchive(tmpFile: string, destDir: string): Promise<void> {
     const proc = Bun.spawn(["tar", "-xzf", tmpFile, "-C", destDir], {
       stderr: "pipe",
     });
-    const [exitCode, stderr] = await Promise.all([
-      proc.exited,
-      new Response(proc.stderr).text(),
+    const timeout = Bun.sleep(120_000).then(() => {
+      proc.kill();
+      throw new Error("Extraction timed out after 120s");
+    });
+    const [exitCode, stderr] = await Promise.race([
+      Promise.all([proc.exited, new Response(proc.stderr).text()]),
+      timeout,
     ]);
     if (exitCode !== 0) {
       throw new Error(`Extraction failed (exit ${exitCode}): ${stderr}`);
@@ -178,7 +196,6 @@ export async function ensureOverlayInstalled(
     `opencode-pets-overlay-${OVERLAY_VERSION}-${target}.${ext}`,
   );
 
-  showToast(client, "Setting up overlay (one-time download ~60MB)...", "info");
   log("info", `Downloading overlay from ${url}`);
 
   try {
@@ -191,12 +208,6 @@ export async function ensureOverlayInstalled(
 
     writeFileSync(VERSION_FILE, OVERLAY_VERSION, "utf-8");
     log("info", `Overlay ${OVERLAY_VERSION} installed successfully`);
-
-    showToast(
-      client,
-      "Overlay ready! Pet will appear when you run /pet",
-      "success",
-    );
     return true;
   } catch (err) {
     log("error", "Overlay setup failed", { error: String(err) });
