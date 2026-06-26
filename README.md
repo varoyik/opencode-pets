@@ -4,7 +4,7 @@ A desktop companion for OpenCode that reacts to your coding sessions in real tim
 
 <p align="center">
   <video
-    src="https://github.com/user-attachments/assets/5d741e19-14b0-4607-a4b0-281ecad4fb64"
+    src="https://github.com/user-attachments/assets/36cc331e-91dc-4c83-874a-2de6a584d601"
     autoplay loop muted playsinline
     width="800"
     controls
