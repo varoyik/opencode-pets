@@ -120,7 +120,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
   window.electronAPI.onSwitchPet((petId: string, spritesheetPath: string) => {
     currentPetId = petId;
-    pet.style.backgroundImage = `url(file://${spritesheetPath})`;
+    // Same backslash normalization as the preload bridge (CSS url() escaping).
+    pet.style.backgroundImage = `url(file:///${spritesheetPath.replace(/\\/g, "/")})`;
   });
 
   // Context menu via separate BrowserWindow

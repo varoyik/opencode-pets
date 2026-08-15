@@ -9,7 +9,12 @@ const spritesheetPath = spritesheetArg
   : "";
 
 contextBridge.exposeInMainWorld("electronAPI", {
-  getSpritesheetPath: (): string => `file://${spritesheetPath}`,
+  getSpritesheetPath: (): string => {
+    // Windows paths contain backslashes which are escape characters in CSS
+    // url(), so normalize to forward slashes and a file:/// prefix.
+    const p = spritesheetPath.replace(/\\/g, "/");
+    return p ? `file:///${p}` : "";
+  },
   onMoodChanged: (callback: (mood: string) => void): void => {
     ipcRenderer.on("mood-changed", (_event: any, mood: string) =>
       callback(mood),

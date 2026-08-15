@@ -20,8 +20,15 @@ interface WindowBounds {
   maxY: number;
 }
 
-function getPrimaryWorkArea(): Electron.Rectangle {
-  return screen.getPrimaryDisplay().workArea;
+// Use the display under the cursor so the pet follows the active screen
+// (on multi-monitor setups the pet no longer gets stuck on the primary display).
+function getActiveWorkArea(): Electron.Rectangle {
+  try {
+    const cursorPoint = screen.getCursorScreenPoint();
+    return screen.getDisplayNearestPoint(cursorPoint).workArea;
+  } catch {
+    return screen.getPrimaryDisplay().workArea;
+  }
 }
 
 function getWindowBoundsForPet(workArea: Electron.Rectangle): WindowBounds {
@@ -127,8 +134,12 @@ export function createWindow(): BrowserWindow {
     minimizable: false,
     show: false,
     paintWhenInitiallyHidden: true,
-    backgroundColor: "#00000000",
-    opacity: winOnly ? 0.9999999 : 1.0,
+    backgroundColor: "#01000000",
+    // Use a non-zero alpha background color: on some Windows environments a
+    // fully transparent (alpha=0) window is never composited to the screen,
+    // so the pet renders (visible via CDP) but never appears. alpha=1/255 is
+    // visually transparent while still triggering presentation.
+    opacity: 1.0,
 
     ...(macOnly && {
       type: "panel" as const,
@@ -142,7 +153,9 @@ export function createWindow(): BrowserWindow {
 
     webPreferences: {
       preload: preloadPath,
-      additionalArguments: [`--spritesheet-path=${spritesheetPath}`],
+      additionalArguments: [
+        `--spritesheet-path=${spritesheetPath.replace(/\\/g, "/")}`,
+      ],
       sandbox: true,
       contextIsolation: true,
       nodeIntegration: false,
@@ -175,7 +188,7 @@ export function createWindow(): BrowserWindow {
   let throwVelocityY = 0;
   let throwTimer: ReturnType<typeof setTimeout> | null = null;
 
-  const workArea = getPrimaryWorkArea();
+  const workArea = getActiveWorkArea();
   const bounds = getWindowBoundsForPet(workArea);
 
   const config = readConfig();
@@ -245,7 +258,7 @@ export function createWindow(): BrowserWindow {
       let nextX = pos[0] + throwVelocityX;
       let nextY = pos[1] + throwVelocityY;
 
-      const wa = getPrimaryWorkArea();
+      const wa = getActiveWorkArea();
       const b = getWindowBoundsForPet(wa);
       const clampedX = Math.max(b.minX, Math.min(nextX, b.maxX));
       const clampedY = Math.max(b.minY, Math.min(nextY, b.maxY));
@@ -285,7 +298,7 @@ export function createWindow(): BrowserWindow {
       return;
     }
     const pos = win.getPosition() as [number, number];
-    const wa = getPrimaryWorkArea();
+    const wa = getActiveWorkArea();
     const b = getWindowBoundsForPet(wa);
     const [cx, cy] = clampWindowPosition(pos[0] + dx, pos[1] + dy, b);
     safeSetPosition(win, cx, cy);
@@ -313,12 +326,12 @@ export function createWindow(): BrowserWindow {
     const pos = win.getPosition() as [number, number];
     if (!Number.isFinite(pos[0]) || !Number.isFinite(pos[1])) {
       const [defaultX, defaultY] =
-        getDefaultWindowPosition(getPrimaryWorkArea());
+        getDefaultWindowPosition(getActiveWorkArea());
       safeSetPosition(win, defaultX, defaultY);
       savePositionSoon();
       return;
     }
-    const wa = getPrimaryWorkArea();
+    const wa = getActiveWorkArea();
     if (isPetCompletelyOffScreen(pos[0], pos[1], wa)) {
       const [defaultX, defaultY] = getDefaultWindowPosition(wa);
       safeSetPosition(win, defaultX, defaultY);
