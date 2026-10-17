@@ -6,23 +6,35 @@
   "main": "./dist/index.js",
   "exports": {
     ".": "./dist/index.js",
-    "./tui": "./dist/tui.js"
+    "./tui": "./dist/tui.js",
+    "./rpc": "./dist/rpc.js"
   },
   "files": [
     "dist"
   ],
+  "engines": {
+    "opencode": "^1.18.29 || ^2.0.0"
+  },
   "peerDependencies": {
-    "@opencode-ai/plugin": "^1.16.2"
+    "@opencode-ai/plugin": "^1.18.29",
+    "@opencode/plugin": "^2.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@opencode/plugin": {
+      "optional": true
+    }
   },
   "devDependencies": {
-    "@opencode-ai/plugin": "^1.16.2",
+    "@opencode-ai/plugin": "^1.18.29",
     "@opencode-pets/core": "workspace:*",
+    "@opencode/plugin": "^2.0.30",
     "@opentui/core": "^0.4.1",
     "@opentui/keymap": "^0.4.1",
-    "@opentui/solid": "^0.4.1"
+    "@opentui/solid": "^0.4.1",
+    "solid-js": "^1.9"
   },
   "scripts": {
-    "build": "bun build src/index.ts --outdir dist --target bun --format esm --external @opencode-ai/plugin && bun run scripts/build-tui.ts",
+    "build": "bun build src/index.ts src/rpc.ts --outdir dist --target bun --format esm --external @opencode-ai/plugin --external @opencode/plugin --external '@opencode/plugin/*' && bun run scripts/build-tui.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p src/tui/tsconfig.json",
     "prepack": "cp ../../README.md README.md",
     "postpack": "rm -f README.md",

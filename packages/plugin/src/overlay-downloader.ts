@@ -7,12 +7,10 @@ import {
   unlinkSync,
   writeFileSync,
 } from "node:fs";
-import type { PluginInput } from "@opencode-ai/plugin";
 import type { LogFn } from "@opencode-pets/core";
 import { resolveOverlayPath } from "./overlay-manager.js";
+import type { ToastVariant } from "./rpc.js";
 import pkg from "../package.json" with { type: "json" };
-
-type OpencodeClient = PluginInput["client"];
 
 /** Overlay version — lockstepped with plugin package.json. */
 const OVERLAY_VERSION: string = pkg.version;
@@ -29,7 +27,8 @@ const DEV_ELECTRON_SYMLINK: string = path.join(
 const RELEASE_OWNER = "varoyik";
 const RELEASE_REPO = "opencode-pets";
 
-type ToastVariant = "info" | "success" | "error";
+/** Toast reporter — wired to the notifier of the active OpenCode generation. */
+type ToastFn = (message: string, variant: ToastVariant) => void;
 
 function detectTarget(): string {
   return `${process.platform}-${process.arch}`;
@@ -113,18 +112,10 @@ async function extractArchive(tmpFile: string, destDir: string): Promise<void> {
   }
 }
 
-function showToast(
-  client: OpencodeClient,
-  message: string,
-  variant: ToastVariant,
-): void {
-  client.tui.showToast({ body: { message, variant } }).catch(() => {});
-}
-
 /** Ensure overlay binary is installed. Never throws — returns false on failure. */
 export async function ensureOverlayInstalled(
-  client: OpencodeClient,
   log: LogFn,
+  toast: ToastFn,
 ): Promise<boolean> {
   if (isDevMode()) {
     log(
@@ -162,8 +153,7 @@ export async function ensureOverlayInstalled(
     return true;
   } catch (err) {
     log("error", "Overlay setup failed", { error: String(err) });
-    showToast(
-      client,
+    toast(
       "Overlay setup failed. Pet disabled. Will retry next session.",
       "error",
     );

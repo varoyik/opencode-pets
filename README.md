@@ -15,6 +15,27 @@ A desktop companion for OpenCode that reacts to your coding sessions in real tim
 
 ## Quick Start
 
+### OpenCode 2.x
+
+Add the plugin to your global config (`~/.config/opencode/opencode.json`):
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugins": ["opencode-pets"]
+}
+```
+
+Or install it with the CLI:
+
+```bash
+opencode plugin add opencode-pets
+```
+
+On 2.x the server, TUI, and RPC entrypoints ship in one package and load together — no separate TUI config file is needed.
+
+### OpenCode 1.x (requires 1.18.29 or newer)
+
 Add `opencode-pets` to your OpenCode server config (`~/.config/opencode/opencode.json` or a project-local `.opencode/opencode.json`):
 
 ```json
@@ -109,7 +130,7 @@ opencode-pets is an OpenCode plugin, not a standalone app. The plugin hooks into
 ```
 OpenCode
   │
-  ├── Pet plugin (server)
+  ├── Pet plugin (server; one dual-mode entry for 1.x and 2.x)
   │     hooks SSE events + tool lifecycle
   │     derives mood from session context
   │     spawns and manages the overlay
@@ -119,9 +140,9 @@ OpenCode
   │                                        CSS spritesheet animation
   │                                        drag, throw, speech bubble
   │
-  └── Pet TUI plugin
-        keymap commands + DialogAlert
-        for /pet feedback
+  └── Pet TUI plugin (one dual-mode entry for 1.x and 2.x)
+        1.x: keymap commands + DialogAlert for /pet feedback
+        2.x: RPC event subscription for /pet dialogs and toasts
 ```
 
 The overlay is a transparent, frameless, always-on-top window with `focusable: false`, so it never steals keyboard focus. It renders a CSS spritesheet and swaps animation classes on mood changes. On Linux Wayland, it runs under XWayland automatically because native Wayland can't self-position or stay on top.
